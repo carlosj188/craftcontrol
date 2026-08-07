@@ -1,0 +1,18 @@
+# segredos — nunca versionar
+.env
+*.env
+!.env.example
+
+# dados do servidor e do painel
+data/
+mods-off/
+mods-lixo/
+backups/
+*.tar.gz
+
+node_modules/
+npm-debug.log*
+.DS_Store
+
+# configuração local do deploy
+.deploy.env

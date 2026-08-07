@@ -1,0 +1,3301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0D1014" />
+<title>CraftControl</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0D1014;
+    --elev:#14181E;
+    --elev-2:#191F27;
+    --inset:#090C10;
+    --line:#232B35;
+    --line-soft:#1A2029;
+    --fg:#E7EDF3;
+    --dim:#93A2B1;
+    --faint:#5D6C7B;
+    --grass:#6DAF43;
+    --grass-lo:#4E8A32;
+    --xp:#8CDB62;
+    --amber:#E0B341;
+    --red:#E5534B;
+    --radius:14px;
+    --radius-sm:10px;
+    --shadow:0 1px 0 rgba(255,255,255,.02), 0 8px 24px -12px rgba(0,0,0,.6);
+    --gap:16px;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1100px 520px at 12% -12%, rgba(109,175,67,.07), transparent 62%),
+      radial-gradient(760px 420px at 102% -6%, rgba(140,219,98,.035), transparent 58%),
+      var(--bg);
+    background-attachment:fixed;
+    color:var(--fg);
+    font-family:"Inter",system-ui,sans-serif;
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(109,175,67,.3)}
+  button{font:inherit}
+
+  /* navegação por teclado tinha zero pista visual — agora tem, e só no teclado */
+  :focus-visible{outline:2px solid var(--xp);outline-offset:2px;border-radius:6px}
+  .nav-item:focus-visible,.tab:focus-visible{outline-offset:-2px}
+
+  /* barra de rolagem no tom da casa (Firefox + WebKit) */
+  *{scrollbar-width:thin;scrollbar-color:#2C3742 transparent}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#2C3742;border-radius:100px;
+    border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#3C4855;background-clip:content-box}
+
+  h1,h2,h3,.brand-name,.page-title{font-family:"Space Grotesk",sans-serif;letter-spacing:-.01em}
+  .mono{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+
+  /* pixel-grid overlay usado no logo e nos avatares */
+  .px::before,.px::after{content:"";position:absolute;inset:0;pointer-events:none}
+  .px::after{
+    background-image:
+      linear-gradient(90deg,rgba(0,0,0,.18) 1px,transparent 1px),
+      linear-gradient(rgba(0,0,0,.18) 1px,transparent 1px);
+    background-size:7px 7px;mix-blend-mode:overlay;
+  }
+
+  /* ---------- layout shell ---------- */
+  .app{
+    display:grid;
+    grid-template-columns:236px 1fr;
+    min-height:100vh;
+    min-height:100dvh;
+  }
+
+  /* A moldura tem exatamente a altura da tela e quem rola é o conteúdo de cada view,
+     nunca a página. É isso que dá altura definida à cadeia .main → .content → .view
+     → .overview: sem ela o `1fr` do grid resolve como max-content, e o console (que
+     tem 500 linhas) empurra a página inteira.
+     Vale também no celular: sem altura definida lá, o campo de escrever do chat e do
+     console ficava fora da tela, embaixo da barra de abas. */
+  .app{height:100vh;height:100dvh}
+  .main{min-height:0}
+  .content{overflow-y:auto;overscroll-behavior:contain}
+
+  /* ---------- sidebar (desktop) ---------- */
+  .side{
+    border-right:1px solid var(--line-soft);
+    background:linear-gradient(180deg,var(--elev) 0%, rgba(13,16,20,.6) 100%);
+    display:flex;flex-direction:column;
+    padding:20px 14px;
+    position:sticky;top:0;height:100vh;height:100dvh;
+  }
+  .brand{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
+    background:none;border:0;color:inherit;padding:8px 6px;margin-bottom:8px;
+    border-radius:var(--radius-sm);transition:background .15s}
+  .brand:hover{background:var(--elev-2)}
+  .brand:hover .brand-mark{transform:translateY(-1px)}
+  .brand-mark{width:36px;height:36px;flex:none;transition:transform .2s;
+    filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)) drop-shadow(0 0 10px rgba(140,219,98,.12))}
+  /* o wordmark é a única coisa na interface com fonte própria: é a assinatura */
+  .brand-name{font-family:"Chakra Petch",sans-serif;font-size:16.5px;font-weight:700;
+    line-height:1.05;letter-spacing:.005em;white-space:nowrap}
+  .brand-name b{color:var(--xp);font-weight:700}
+  .brand-sub{font-size:10.5px;color:var(--faint);letter-spacing:.05em;text-transform:uppercase;margin-top:1px}
+
+  /* o rosto do servidor no topo — bloco de grama sobre uma placa, senão o
+     desenho isométrico fica solto no ar ao lado do texto */
+  .srv-cube{width:40px;height:40px;flex:none;padding:4px;border-radius:11px;
+    background:radial-gradient(120% 120% at 30% 15%, #1E2530, #12161C);
+    border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+  .nav-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;
+    padding:9px 10px;border-radius:var(--radius-sm);
+    color:var(--dim);font-weight:500;cursor:pointer;
+    border:1px solid transparent;position:relative;
+    transition:background .14s,color .14s;
+  }
+  .nav-item svg{width:18px;height:18px;flex:none}
+  .nav-item:hover{background:var(--elev-2);color:var(--fg)}
+  .nav-item.active{
+    background:linear-gradient(90deg,rgba(109,175,67,.16),rgba(109,175,67,.04));
+    color:var(--fg);border-color:rgba(109,175,67,.28);
+  }
+  .nav-item.active::before{content:"";position:absolute;left:-14px;top:9px;bottom:9px;width:2px;
+    background:var(--grass);border-radius:0 2px 2px 0}
+  .nav-item.active svg{color:var(--grass)}
+  .nav-item .badge{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint)}
+  .nav-item.active .badge{color:var(--grass)}
+  .side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line-soft);
+    display:flex;align-items:center;gap:10px;color:var(--dim);font-size:12px}
+  .side-foot .av{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
+    background:var(--elev-2);border:1px solid var(--line);color:var(--faint)}
+  .side-foot .av svg{width:17px;height:17px}
+  .side-foot .quem{min-width:0;line-height:1.25}
+  .side-foot .quem span{display:block;color:var(--faint);font-size:11px}
+
+  /* ---------- main ---------- */
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;gap:16px;
+    padding:14px 26px;border-bottom:1px solid var(--line-soft);
+    position:sticky;top:0;background:rgba(13,16,20,.82);backdrop-filter:blur(10px);z-index:20;
+  }
+  .server-id{display:flex;align-items:center;gap:12px;min-width:0;position:relative}
+  .server-meta{min-width:0}
+  .server-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .server-addr{font-size:12px;color:var(--faint);font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .addr-extra{display:none}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
+    padding:3px 9px;border-radius:100px;background:rgba(109,175,67,.14);color:var(--xp);
+    border:1px solid rgba(109,175,67,.25);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--xp);
+    box-shadow:0 0 0 0 rgba(140,219,98,.5);animation:pulse 2.4s infinite;flex:none}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(140,219,98,.45)}70%{box-shadow:0 0 0 6px rgba(140,219,98,0)}100%{box-shadow:0 0 0 0 rgba(140,219,98,0)}}
+
+  /* nome do servidor: texto puro quando só há um (.solo), menu quando há mais */
+  .srv-pick{display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:0;
+    font:inherit;color:var(--fg);cursor:pointer;border-radius:7px;max-width:100%}
+  .srv-pick .caret{width:15px;height:15px;color:var(--faint);transition:transform .16s}
+  .srv-pick:hover{color:var(--xp)}
+  .srv-pick.open .caret{transform:rotate(180deg)}
+  .srv-pick.solo{cursor:default;pointer-events:none}
+  .srv-pick.solo .caret{display:none}
+
+  .srv-menu{
+    display:none;position:absolute;top:calc(100% + 10px);left:50px;z-index:40;min-width:230px;
+    background:var(--elev);border:1px solid var(--line);border-radius:12px;padding:6px;
+    box-shadow:0 18px 40px rgba(0,0,0,.5);
+  }
+  .srv-menu.open{display:block}
+  .srv-opt{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:8px;
+    background:none;border:0;color:var(--dim);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+  .srv-opt:hover{background:var(--elev-2);color:var(--fg)}
+  .srv-opt.sel{color:var(--fg);background:rgba(109,175,67,.1)}
+  .srv-opt .bolha{width:8px;height:8px;border-radius:50%;background:var(--xp);flex:none}
+  .srv-opt.off .bolha{background:var(--red)}
+  .srv-opt .quem{min-width:0;flex:1}
+  .srv-opt .quem b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srv-opt .quem span{font-size:11px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+
+  .top-stats{margin-left:auto;display:flex;gap:26px}
+  .tstat{text-align:right}
+  .tstat .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .tstat .v{font-size:15px;font-weight:600;font-family:"JetBrains Mono",monospace}
+
+  .add-srv{
+    display:inline-flex;align-items:center;gap:8px;flex:none;
+    height:36px;padding:0 14px;border-radius:10px;cursor:pointer;
+    background:rgba(109,175,67,.12);border:1px solid rgba(109,175,67,.32);
+    color:var(--xp);font-size:13px;font-weight:600;
+    transition:background .15s,border-color .15s,transform .12s;
+  }
+  .add-srv svg{width:17px;height:17px;flex:none}
+  .add-srv:hover{background:rgba(109,175,67,.2);border-color:var(--grass)}
+  .add-srv:active{transform:scale(.97)}
+
+  .icon-btn{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;
+    border:1px solid var(--line);background:var(--elev);color:var(--dim);cursor:pointer}
+  .icon-btn:hover{color:var(--fg);border-color:var(--grass-lo)}
+  .icon-btn svg{width:17px;height:17px}
+
+  .overlay{position:fixed;inset:0;background:rgba(6,8,11,.72);backdrop-filter:blur(4px);
+    display:none;place-items:center;z-index:80;padding:20px}
+  .overlay.open{display:grid}
+  /* max-height + corpo rolável: instrução longa não estoura a tela nem no celular */
+  .modal{width:100%;max-width:520px;max-height:min(86dvh,720px);display:flex;flex-direction:column;
+    background:var(--elev);border:1px solid var(--line);
+    border-radius:16px;box-shadow:0 24px 60px -20px rgba(0,0,0,.8);overflow:hidden;animation:pop .18s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+  .modal-head{padding:15px 18px;border-bottom:1px solid var(--line-soft);flex:none;
+    display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .modal-head h3{font-size:15px;font-weight:600}
+  .modal-body{padding:18px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;min-height:0}
+  .field label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--faint);margin-bottom:6px}
+  .field input{width:100%;background:var(--inset);border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;color:var(--fg);font-family:"JetBrains Mono",monospace;font-size:13px;outline:none}
+  .field input:focus{border-color:var(--grass-lo);box-shadow:0 0 0 3px rgba(109,175,67,.1)}
+  .modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;flex:none;
+    border-top:1px solid var(--line-soft);background:var(--elev)}
+  .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--line)}
+  .btn.sec{background:transparent;color:var(--dim)}
+  .btn.sec:hover{color:var(--fg)}
+  .btn.pri{background:var(--grass);color:#0c1408;border-color:var(--grass)}
+  .btn.pri:hover{background:var(--xp)}
+
+  .content{
+    padding:20px 26px 34px;max-width:1560px;width:100%;margin:0 auto;
+    flex:1;display:flex;flex-direction:column;min-height:0;
+  }
+  .view{display:none}
+  .view.active{display:flex;flex-direction:column;animation:fade .25s ease}
+  /* Os cards são itens deste flex column, e moram aqui duas armadilhas:
+
+     1. item de flex ENCOLHE por padrão, e como .card tem overflow:hidden o que não
+        coube sumia da tela em vez de fazer a página rolar — a aba Servidor perdia de
+        33 a 78px de cada card em 1080p, sem barra de rolagem para chegar lá.
+     2. view de altura travada com conteúdo estourando faz o navegador DESCARTAR o
+        padding-bottom do .content. No celular esse padding é o que reserva o espaço
+        da barra de abas: sem ele a moderação (visão geral) e o "restaurar um backup"
+        (aba Servidor) ficavam atrás da barra, e a rolagem acabava antes de alcançá-los.
+
+     Então ninguém encolhe e a view cresce com o conteúdo. Trava na altura da tela só
+     quem precisa preencher: a visão geral no desktop (cabe numa tela por projeto) e o
+     chat/console sempre — neles a área de leitura estica e o campo de escrever fica no
+     pé. Medir com a rolagem no fim, não no topo: o defeito só aparece lá embaixo. */
+  .view.active{flex:1 0 auto}
+  .view.active>*{flex:none}
+  .view.active>.overview{flex:1;min-height:0}
+  #chat.view.active,#console.view.active{flex:1 1 0;min-height:0}
+  @media (min-width:921px){#painel.view.active{flex:1 1 0;min-height:0}}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+    margin-bottom:16px;flex-wrap:wrap}
+  .page-title{font-size:20px;font-weight:600}
+  .page-sub{font-size:12.5px;color:var(--faint);margin-top:2px}
+
+  /* ---------- overview: composição que ocupa a tela ---------- */
+  .overview{
+    display:grid;gap:var(--gap);flex:1;min-height:0;
+    grid-template-columns:minmax(320px,420px) minmax(0,1fr);
+    /* a linha da lista é 1fr: o grid inteiro é limitado pela viewport (flex:1 +
+       min-height:0 acima), então o console — que ocupa as duas linhas — desce até
+       a moderação e para ali. Teto fixo aqui não serve: o console passa a empurrar
+       a linha de baixo, o grid cresce além da tela e a página inteira rola.
+       As outras três são min-content, não auto: `auto` deixa a linha encolher abaixo
+       do conteúdo quando o grid não cabe (o overflow:hidden do card zera o mínimo
+       automático), e em 1366x768 isso escondia 26px das métricas e 33px dos comandos
+       rápidos. Com min-content elas param de encolher e a página rola, que é o certo. */
+    grid-template-rows:min-content minmax(160px,1fr) min-content min-content;
+    grid-template-areas:
+      "stats   stats"
+      "players console"
+      "quick   console"
+      "mod     mod";
+  }
+  .a-stats{grid-area:stats}
+  .a-players{grid-area:players}
+  .a-console{grid-area:console}
+  .a-quick{grid-area:quick}
+  .a-mod{grid-area:mod}
+  .overview>.card{animation:rise .4s both}
+  .overview>.card:nth-child(1){animation-delay:.02s}
+  .overview>.card:nth-child(2){animation-delay:.07s}
+  .overview>.card:nth-child(3){animation-delay:.12s}
+  .overview>.card:nth-child(4){animation-delay:.17s}
+  .overview>.card:nth-child(5){animation-delay:.22s}
+
+  /* ---------- métricas do host ---------- */
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px;padding:14px 16px}
+  .stat{min-width:0}
+  /* o TPS é do servidor, não da máquina: ganha a linha inteira acima do resto */
+  .stat.tps{grid-column:1/-1;border-bottom:1px solid var(--line-soft);padding-bottom:14px}
+  .stat.tps .v{font-size:24px}
+  .stat.tps .k{display:flex;align-items:center;gap:7px}
+  .tps-tag{font-size:9px;letter-spacing:.08em;padding:1px 6px;border-radius:100px;
+    background:rgba(224,179,65,.16);color:var(--amber);border:1px solid rgba(224,179,65,.3)}
+  .tps-tag:empty{display:none}
+  .stat .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .stat .v{font-size:19px;font-weight:600;font-family:"JetBrains Mono",monospace;margin:1px 0 7px;
+    display:flex;align-items:baseline;gap:6px}
+  .stat .v small{font-size:11px;color:var(--faint);font-weight:400;font-family:"Inter",sans-serif}
+  .bar{height:5px;border-radius:3px;background:var(--inset);overflow:hidden;
+    box-shadow:inset 0 0 0 1px var(--line-soft)}
+  /* cor reforça o número, nunca substitui: o valor está sempre escrito ao lado */
+  .bar i{display:block;height:100%;width:0;background:var(--grass);border-radius:3px;transition:width .5s ease}
+  /* servidor a 20 TPS acende de leve — o único brilho da interface, e ele significa algo */
+  .stat.tps .bar i:not(.warn):not(.bad){background:linear-gradient(90deg,var(--grass),var(--xp));
+    box-shadow:0 0 10px rgba(140,219,98,.45)}
+  .bar i.warn{background:var(--amber)}
+  .bar i.bad{background:var(--red)}
+  .stat .sub{font-size:11px;color:var(--faint);margin-top:6px;font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- chat ---------- */
+  .chatlist{flex:1;overflow-y:auto;min-height:0;padding:16px;display:flex;flex-direction:column;gap:11px}
+  .cmsg{display:flex;gap:11px;align-items:flex-start}
+  .cbody{min-width:0;flex:1}
+  .chead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .cnick{font-weight:600;font-size:13px}
+  .ctime{font-size:10.5px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+  .ctext{font-size:13.5px;word-break:break-word;white-space:pre-wrap}
+  .cmsg.server .cnick{color:var(--xp)}
+  .cmsg.server .ctext{color:var(--xp)}
+  .cmsg.me .ctext{font-style:italic;color:var(--dim)}
+  .csys{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--faint);
+    font-family:"JetBrains Mono",monospace}
+  .csys::before,.csys::after{content:"";flex:1;height:1px;background:var(--line-soft)}
+  .creply{margin-left:auto;flex:none}
+  @media (hover:hover){
+    .cmsg .creply{opacity:0;transition:opacity .14s}
+    .cmsg:hover .creply,.cmsg:focus-within .creply{opacity:1}
+  }
+  .server-av{width:30px;height:30px;border-radius:7px;flex:none;display:grid;place-items:center;
+    background:rgba(109,175,67,.14);border:1px solid rgba(109,175,67,.3);color:var(--grass)}
+  .server-av svg{width:16px;height:16px}
+
+  .card{background:var(--elev);border:1px solid var(--line-soft);border-radius:var(--radius);
+    box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden;
+    position:relative}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:13px 16px;border-bottom:1px solid var(--line-soft);flex:none}
+  .card-title{font-size:13px;font-weight:600;letter-spacing:.01em;display:flex;align-items:center;gap:9px}
+  .card-title .n{color:var(--grass);font-family:"JetBrains Mono",monospace;font-size:12px}
+  .card-body{padding:14px 16px}
+  .card-body.scroll{overflow-y:auto;min-height:0;flex:1}
+  /* lista rolável cortava um item pela metade e parecia defeito. O degradê avisa que
+     tem mais embaixo — e some sozinho na lista curta, porque aí ele cai sobre o
+     próprio fundo do card. */
+  .card:has(>.card-body.scroll)::after{
+    content:"";position:absolute;left:1px;right:1px;bottom:1px;height:26px;pointer-events:none;
+    background:linear-gradient(transparent,var(--elev));
+    border-radius:0 0 var(--radius) var(--radius);
+  }
+  .ghost{font-size:11px;color:var(--dim);background:transparent;border:1px solid var(--line);
+    padding:5px 11px;border-radius:8px;cursor:pointer;font-weight:500;flex:none}
+  .ghost:hover{color:var(--fg);border-color:var(--grass-lo)}
+
+  /* scrollbars */
+  .scroll::-webkit-scrollbar,.term::-webkit-scrollbar{width:8px}
+  .scroll::-webkit-scrollbar-thumb,.term::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+  .scroll::-webkit-scrollbar-track,.term::-webkit-scrollbar-track{background:transparent}
+
+  /* players list */
+  .plist{display:flex;flex-direction:column;gap:2px;padding:8px}
+  .prow{display:flex;align-items:center;gap:12px;padding:9px 8px;border-radius:10px;
+    transition:background .14s}
+  .prow:hover{background:var(--elev-2)}
+  .head-av{width:30px;height:30px;border-radius:7px;flex:none;position:relative;overflow:hidden;
+    display:block;image-rendering:pixelated;box-shadow:0 0 0 1px var(--line)}
+  /* skin real via mc-heads; se o navegador estiver sem internet ou o nick for
+     pirata, a imagem some e fica a cor sorteada do nick por baixo */
+  .head-av img{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .pinfo{min-width:0}
+  .pname{font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ptime{font-size:11px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+  .prow-actions{display:flex;gap:6px;margin-left:auto;flex:none}
+  /* vagas livres — reforça o limite do servidor sem card vazio */
+  .pslot{display:flex;align-items:center;gap:12px;padding:9px 8px;border-radius:10px;
+    border:1px dashed var(--line-soft);color:var(--faint);font-size:12px;
+    font-family:"JetBrains Mono",monospace}
+  .pslot .box{width:30px;height:30px;border-radius:7px;border:1px dashed var(--line);flex:none}
+  @media (hover:hover){
+    .prow-actions{opacity:0;transition:opacity .14s}
+    .prow:hover .prow-actions,.prow:focus-within .prow-actions{opacity:1}
+  }
+  .mini{font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);
+    background:var(--elev);color:var(--dim);cursor:pointer;font-weight:500;white-space:nowrap}
+  .mini:hover{color:var(--fg)}
+  .mini.kick:hover{border-color:var(--amber);color:var(--amber)}
+  .mini.ban:hover{border-color:var(--red);color:var(--red)}
+  .mini.wl:hover{border-color:var(--grass);color:var(--grass)}
+
+  /* quick commands */
+  .qcmd{display:grid;gap:8px;align-content:start}
+  .qbtn{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;
+    background:var(--inset);border:1px solid var(--line-soft);cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--fg);text-align:left;
+    transition:border-color .14s,background .14s}
+  .qbtn:hover{border-color:var(--grass-lo);background:#0B1015}
+  .qbtn .pr{color:var(--grass);font-weight:700;flex:none}
+  .qbtn .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qbtn .lbl{color:var(--faint);margin-left:auto;font-family:"Inter",sans-serif;font-size:11px;flex:none}
+
+  /* moderation buttons */
+  .modgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+  .modbtn{display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;
+    background:var(--inset);border:1px solid var(--line-soft);cursor:pointer;color:var(--fg);
+    font-size:12.5px;font-weight:500;text-align:left;transition:border-color .14s,transform .12s}
+  .modbtn:hover{border-color:var(--grass-lo)}
+  .modbtn:active{transform:scale(.985)}
+  .modbtn svg{width:17px;height:17px;flex:none}
+  .modbtn.danger svg{color:var(--red)} .modbtn.ok svg{color:var(--grass)}
+  .modbtn.neutral svg{color:var(--dim)}
+
+  /* console */
+  .console-card{background:var(--inset);border-color:var(--line)}
+  .console-card .card-head{border-color:var(--line)}
+  .term{font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.75;
+    padding:12px 16px;overflow-y:auto;flex:1;min-height:0}
+  /* recuo pendente: a continuação de uma linha longa entra sob a mensagem, nunca
+     sob o horário — assim dá pra varrer a coluna de timestamps com o olho */
+  .term .ln{white-space:pre-wrap;word-break:break-word;padding-left:5.2em;text-indent:-5.2em}
+  .term .ln:last-child{animation:fade .2s ease}
+  .term .t{color:var(--faint)}
+  .term .info{color:var(--grass)} .term .warn{color:var(--amber)} .term .err{color:var(--red)}
+  .term .cmd{color:var(--xp)}
+  .term .msg{color:var(--dim)}
+  .prompt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line);flex:none}
+  .prompt .car{color:var(--grass);font-family:"JetBrains Mono",monospace;font-weight:700}
+  .prompt input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--fg);
+    font-family:"JetBrains Mono",monospace;font-size:13px}
+  .prompt input::placeholder{color:var(--faint)}
+  .send{width:34px;height:30px;border-radius:8px;border:none;cursor:pointer;flex:none;
+    background:var(--grass);color:#0c1408;display:grid;place-items:center}
+  .send:hover{background:var(--xp)}
+  .send svg{width:16px;height:16px}
+
+  .toggle{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);flex:none}
+  .sw{width:34px;height:19px;border-radius:100px;background:var(--line);position:relative;cursor:pointer;transition:background .15s}
+  .sw.on{background:var(--grass-lo)}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+    background:#fff;transition:transform .15s}
+  .sw.on::after{transform:translateX(15px)}
+
+  /* ---------- reinício agendado ---------- */
+  .ag-proximo{font-size:15px;font-weight:600;margin-bottom:16px;
+    font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+  .ag-proximo.off{color:var(--faint);font-weight:400;font-family:"Inter",sans-serif}
+  .ag-linha{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+  .ag-campo{display:flex;flex-direction:column;gap:7px}
+  .ag-campo>span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .ag-campo input[type=time]{
+    background:var(--inset);border:1px solid var(--line);border-radius:9px;color:var(--fg);
+    padding:8px 10px;font-family:"JetBrains Mono",monospace;font-size:14px;color-scheme:dark;
+  }
+  .ag-campo input[type=time]:focus{outline:none;border-color:var(--grass-lo)}
+  .ag-dias{display:flex;gap:6px;flex-wrap:wrap}
+  .ag-dia{width:38px;height:36px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;
+    background:var(--inset);border:1px solid var(--line);color:var(--faint)}
+  .ag-dia:hover{color:var(--fg);border-color:var(--grass-lo)}
+  .ag-dia.on{background:rgba(109,175,67,.16);border-color:var(--grass-lo);color:var(--xp)}
+  .ag-check{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13px;color:var(--dim);cursor:pointer}
+  .ag-check input{margin-top:2px;width:15px;height:15px;accent-color:var(--grass);flex:none}
+  .ag-check em{font-style:normal;color:var(--faint)}
+  .ag-rodape{display:flex;gap:16px;align-items:flex-end;justify-content:space-between;
+    flex-wrap:wrap;margin-top:18px}
+  .ag-botoes{display:flex;gap:9px;flex:none}
+
+  /* players table */
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse}
+  thead th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+    text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-soft);font-weight:600}
+  tbody td{padding:11px 12px;border-bottom:1px solid var(--line-soft);font-size:13px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--elev-2)}
+  .tp-name{display:flex;align-items:center;gap:11px}
+  .tacts{display:flex;gap:6px;justify-content:flex-end}
+
+  /* bans / whitelist */
+  .subtabs{display:flex;gap:4px;margin-bottom:16px;background:var(--inset);padding:4px;
+    border-radius:11px;width:fit-content;border:1px solid var(--line-soft)}
+  .subtab{padding:7px 15px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--dim);
+    cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .subtab .n{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint)}
+  .subtab.active{background:var(--elev-2);color:var(--fg)}
+  .subtab.active .n{color:var(--grass)}
+  .listgrid{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  /* listas curtas não ficam esticadas em telas largas */
+  #moderacao .card,#mais .card,#servidor .card{max-width:1180px}
+  .listrow{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line-soft);
+    border-radius:10px;background:var(--elev);min-width:0}
+  .listrow svg{flex:none}
+  .listrow .reason{font-size:11px;color:var(--faint);margin-left:2px}
+  .listrow .txt{min-width:0}
+  .listrow .act{margin-left:auto;flex:none}
+  .listrow.add{border-style:dashed;justify-content:center;color:var(--faint);cursor:pointer;font-size:12.5px}
+  .listrow.add:hover{color:var(--grass);border-color:var(--grass-lo)}
+
+  /* histórico de jogadores — lista em vez de tabela: cai bem no celular sozinha */
+  .hlist{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(min(430px,100%),1fr))}
+  .hrow{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line-soft);
+    border-radius:10px;background:var(--elev);min-width:0}
+  .hrow.on{border-color:rgba(109,175,67,.3);background:linear-gradient(90deg,rgba(109,175,67,.07),transparent 70%)}
+  .hinfo{min-width:0;flex:1}
+  .hmeta{font-size:11px;color:var(--faint);font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hwhen{font-size:11.5px;color:var(--dim);text-align:right;flex:none;font-family:"JetBrains Mono",monospace}
+  .hwhen .lbl{display:block;font-size:10px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;
+    font-family:"Inter",sans-serif}
+  .hwhen.on{color:var(--xp)}
+
+  /* backup do mundo */
+  .bk{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .bk-info{min-width:0;flex:1}
+  .bk-size{font-family:"JetBrains Mono",monospace;font-size:19px;font-weight:600}
+  .bk-size span{font-size:12px;color:var(--faint);font-weight:400;font-family:"Inter",sans-serif}
+  .btn.pri.big{padding:12px 20px;display:inline-flex;align-items:center;gap:9px}
+  .btn.pri.big svg{width:17px;height:17px}
+  .steps{display:grid;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft)}
+  /* mesmo motivo do .banner: o número sai do fluxo e o texto corre inteiro, com os
+     <span class="mono"> se comportando como palavras — não como colunas de um flex */
+  .step{position:relative;padding-left:24px;font-size:12px;line-height:1.6;color:var(--dim)}
+  .step .n{position:absolute;left:0;top:0;width:17px;height:17px;border-radius:5px;
+    display:grid;place-items:center;font-family:"JetBrains Mono",monospace;font-size:10.5px;
+    color:var(--grass);background:rgba(109,175,67,.13);border:1px solid rgba(109,175,67,.22)}
+
+  /* ---------- mods ---------- */
+  .mods-acoes{display:flex;align-items:center;gap:9px;flex:none}
+  .mods-filtro{width:210px;background:var(--inset);border:1px solid var(--line);border-radius:9px;
+    padding:7px 11px;color:var(--fg);font-size:12.5px;outline:none}
+  .mods-filtro:focus{border-color:var(--grass-lo)}
+  .mods-filtro::placeholder{color:var(--faint)}
+  .mods-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+  .mstat{background:var(--elev);border:1px solid var(--line-soft);border-radius:11px;padding:11px 13px}
+  .mstat .k{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .mstat .v{font-size:17px;font-weight:600;margin-top:2px;display:block}
+  .mstat.alerta .v{color:var(--amber)}
+
+  .mlist{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(430px,100%),1fr))}
+  .mrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line-soft);
+    border-radius:10px;background:var(--elev);min-width:0;position:relative}
+  .mrow.novo{border-color:rgba(224,179,65,.32)}
+  .mrow.orfao{border-style:dashed;opacity:.75}
+  /* cubo de mod: a mesma linguagem do bloco da marca, em miniatura e sem cor de acento */
+  .mcube{width:32px;height:32px;flex:none;border-radius:9px;display:grid;place-items:center;
+    background:radial-gradient(120% 120% at 30% 15%,#1E2530,#12161C);border:1px solid var(--line);
+    font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:700;color:var(--faint)}
+  /* Quem cede espaço numa linha apertada é a etiqueta, nunca o nome: com
+     `min-width:0` aqui e `flex:none` nas etiquetas, o nome do mod era o único a
+     encolher e chegava a zerar em três colunas. */
+  .minfo{min-width:110px;flex:1}
+  .mnome{font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mmeta{font-size:11px;color:var(--faint);font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .mtags{display:flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}
+  .mtag{font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:100px;
+    white-space:nowrap;border:1px solid transparent;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis}
+  .mtag.up{background:rgba(224,179,65,.14);color:var(--amber);border-color:rgba(224,179,65,.3)}
+  .mtag.cli{background:rgba(147,162,177,.12);color:var(--dim);border-color:var(--line)}
+  .mtag.err{background:rgba(229,83,75,.12);color:var(--red);border-color:rgba(229,83,75,.28)}
+  .mlink{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:8px;
+    color:var(--faint);border:1px solid transparent}
+  .mlink:hover{color:var(--grass);border-color:var(--line)}
+  .mlink svg{width:15px;height:15px}
+  .mrow.off{opacity:.62;background:var(--inset)}
+  .mrow.off .mcube{border-style:dashed}
+  .mtag.desl{background:transparent;color:var(--faint);border-color:var(--line)}
+  .macts{display:flex;gap:6px;flex:none}
+  /* Fora do fluxo, não só transparente: `opacity:0` esconde mas continua
+     reservando lugar, e os três botões comiam ~240px de TODA linha o tempo
+     todo — em três colunas era o que sobrava, e o nome do mod zerava. Aqui
+     eles flutuam sobre a linha só no hover, à esquerda do link do Modrinth,
+     com um degradê para o texto por baixo não terminar cortado a seco.
+     A condição composta importa: um laptop com tela sensível ao toque casa
+     `hover:hover` E a media query do celular ao mesmo tempo — com o min-width
+     aqui, o layout estreito nunca herda o flutuar e não precisa desfazê-lo. */
+  @media (hover:hover) and (min-width:921px){
+    .macts{position:absolute;right:46px;top:50%;transform:translateY(-50%);
+      opacity:0;pointer-events:none;transition:opacity .14s;
+      padding-left:34px;border-radius:8px;
+      background:linear-gradient(90deg,transparent,var(--elev) 34px)}
+    .mrow.off .macts{background:linear-gradient(90deg,transparent,var(--inset) 34px)}
+    .mrow:hover .macts,.mrow:focus-within .macts{opacity:1;pointer-events:auto}
+  }
+  /* resultados da busca no catálogo, dentro do modal */
+  .mrlist{display:grid;gap:7px;max-height:340px;overflow-y:auto;margin-top:4px}
+  .mrrow{display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid var(--line-soft);
+    border-radius:10px;background:var(--inset);min-width:0}
+  .mrrow img{width:34px;height:34px;border-radius:8px;flex:none;object-fit:cover;background:var(--elev-2)}
+  .mrrow .semicone{width:34px;height:34px;border-radius:8px;flex:none;display:grid;place-items:center;
+    background:var(--elev-2);border:1px solid var(--line);color:var(--faint);
+    font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:700}
+  .mrinfo{min-width:0;flex:1}
+  .mrnome{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrdesc{font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mrdown{font-size:10.5px;color:var(--faint);font-family:"JetBrains Mono",monospace;margin-top:2px}
+
+  /* banner com botão dentro — pendência de reinício, progresso do aplicar e
+     atualizações disponíveis usam o mesmo formato */
+  .banner.mods-pend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    background:rgba(224,179,65,.1);border-color:rgba(224,179,65,.3);color:var(--amber)}
+  .banner.mods-pend span{flex:1;min-width:200px}
+  .banner.mods-pend .btn{flex:none;padding:7px 14px;font-size:12.5px}
+  @media (max-width:920px){
+    .mods-acoes{width:100%}
+    .mods-filtro{flex:1;width:auto}
+    .mods-resumo{grid-template-columns:1fr 1fr}
+    .mmeta{white-space:normal}
+    /* Em 360px os dois botões comiam 142 dos 298px da linha e sobrava menos de
+       60px pro nome do mod. Aqui a linha vira grade de duas fileiras: identidade
+       em cima, ações e etiquetas embaixo. As ações não se escondem no toque. */
+    .mrow{display:grid;grid-template-columns:auto 1fr auto;
+      grid-template-areas:"cubo info link" "acts acts tags";
+      gap:9px 11px;align-items:center}
+    .mcube{grid-area:cubo}
+    .minfo{grid-area:info;min-width:0}
+    .mlink{grid-area:link}
+    /* o flutuar do desktop nunca chega aqui (a media query dele exige ≥921px),
+       então as ações só precisam do lugar delas na grade */
+    .macts{grid-area:acts}
+    .mtags{grid-area:tags;justify-content:flex-end;flex-wrap:wrap;row-gap:4px;overflow:visible}
+  }
+
+  .empty{color:var(--faint);font-size:13px;text-align:center;padding:38px 16px;grid-column:1/-1;
+    line-height:1.6}
+  .roadmap{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  .ritem{display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--elev);
+    border:1px solid var(--line-soft);border-radius:11px;font-size:13px}
+  .rtag{font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 8px;border-radius:6px;
+    background:rgba(224,179,65,.14);color:var(--amber);margin-left:auto;flex:none;white-space:nowrap}
+
+  .tabbar{display:none}
+
+  /* ---------- tolerância de altura (só desktop) ----------
+     A visão geral cabe exatamente numa tela, então toda a diferença entre 1920x1080
+     e 1920x1200 caía numa linha só: a lista de jogadores ganhava 120px em 1200p e
+     perdia os mesmos 120 em 1080p, onde acabava cortando um jogador no meio. Aqui o
+     espaço vertical inteiro — respiros, gaps, altura de botão — encolhe junto, em
+     proporção à tela, e a diferença se dilui na página toda.
+
+     A regra de cada clamp é `Bpx / 12 = Yvh`: assim o valor satura no número aprovado
+     por volta de 1200px de altura (1200p, 1440p e 4K ficam idênticos ao que já era) e
+     desce ~10% em 1080p. O mínimo é o piso para notebooks baixos. Mexer num número
+     aqui é mexer no ritmo da página inteira — refazer a conta, não chutar. */
+  @media (min-width:921px){
+    :root{--gap:clamp(12px,1.33vh,16px)}
+    .content{padding-top:clamp(14px,1.67vh,20px);padding-bottom:clamp(22px,2.83vh,34px)}
+    .card-head{padding-top:clamp(9px,1.05vh,13px);padding-bottom:clamp(9px,1.05vh,13px)}
+    .card-body{padding-top:clamp(10px,1.17vh,14px);padding-bottom:clamp(10px,1.17vh,14px)}
+    .statgrid{padding-top:clamp(10px,1.17vh,14px);padding-bottom:clamp(10px,1.17vh,14px);
+      gap:clamp(13px,1.5vh,18px)}
+    .stat.tps{padding-bottom:clamp(10px,1.17vh,14px)}
+    .stat .v{margin-bottom:clamp(5px,.58vh,7px)}
+    .stat .sub{margin-top:clamp(4px,.5vh,6px)}
+    .plist{padding:clamp(5px,.67vh,8px)}
+    .prow,.pslot{padding-top:clamp(6px,.75vh,9px);padding-bottom:clamp(6px,.75vh,9px)}
+    .qcmd{gap:clamp(6px,.67vh,8px)}
+    .qbtn{padding-top:clamp(6px,.8vh,10px);padding-bottom:clamp(6px,.8vh,10px)}
+    .modgrid{gap:clamp(8px,.83vh,10px)}
+    .modbtn{padding-top:clamp(9px,1vh,12px);padding-bottom:clamp(9px,1vh,12px)}
+    .prompt{padding-top:clamp(8px,.83vh,10px);padding-bottom:clamp(8px,.83vh,10px)}
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:1180px){
+    .overview{grid-template-columns:minmax(300px,360px) minmax(0,1fr)}
+    .top-stats{gap:18px}
+  }
+
+  @media (max-width:920px){
+    .app{grid-template-columns:1fr}
+    .side{display:none}
+    .top-stats{display:none}
+    .add-srv{width:36px;padding:0;justify-content:center}
+    .add-srv span{display:none}
+    .topbar{padding:11px 14px;gap:12px}
+    .topbar .server-id{flex:1;min-width:0}
+    .addr-extra{display:inline}
+    .topbar .srv-cube{width:34px;height:34px}
+    .server-name{font-size:14px;gap:7px}
+    .content{padding:14px 14px calc(96px + env(safe-area-inset-bottom))}
+    .page-head{margin-bottom:12px}
+    .page-title{font-size:17px}
+
+    /* overview vira empilhado, com o console em altura confortável */
+    .overview{display:flex;flex-direction:column;gap:12px}
+    .overview>.card{flex:none}
+    .a-players .card-body.scroll{max-height:none}
+    .a-console .term{height:min(42dvh,320px);flex:none}
+
+    /* as vagas livres são enfeite: no celular custavam meia tela de rolagem
+       antes do console. A capacidade já está escrita no "1/5" do cabeçalho. */
+    .pslot{display:none}
+    /* a sub-linha do TPS é a única longa o bastante para ser cortada aqui */
+    .stat.tps .sub{white-space:normal;overflow:visible}
+    /* botão de adicionar servidor: presente, mas sem competir com o resto */
+    .add-srv{background:var(--elev-2);border-color:var(--line);color:var(--dim)}
+
+    .modgrid{grid-template-columns:1fr 1fr;gap:8px}
+    /* energia são três botões: em 2 colunas o "Iniciar" ficava órfão numa linha só pra ele */
+    #servidor .modgrid{grid-template-columns:repeat(3,1fr)}
+    .modbtn{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 11px;font-size:12px}
+    .listgrid,.hlist{grid-template-columns:1fr}
+    .roadmap{grid-template-columns:1fr}
+    .bk{gap:12px}
+    .bk .btn.pri.big{width:100%;justify-content:center}
+    .subtabs{width:100%}
+    .subtab{flex:1;justify-content:center}
+
+    .tabbar{
+      display:flex;position:fixed;bottom:0;left:0;right:0;z-index:40;
+      background:rgba(13,16,20,.94);backdrop-filter:blur(12px);
+      border-top:1px solid var(--line);justify-content:space-around;
+      padding:8px 6px calc(10px + env(safe-area-inset-bottom));
+    }
+    .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--faint);
+      font-size:10px;font-weight:500;cursor:pointer;padding:4px 6px;border-radius:9px;flex:1;
+      background:transparent;border:none}
+    .tab svg{width:21px;height:21px}
+    .tab.active{color:var(--grass)}
+    .tab.active svg{color:var(--grass)}
+  }
+
+  /* console e chat em tela cheia no mobile: ocupam o que sobra */
+  @media (max-width:920px){
+    #console .console-card{flex:1;min-height:0}
+    #console .term{height:auto;flex:1;min-height:180px}
+    #chat .card{flex:1;min-height:0}
+    .statgrid{grid-template-columns:1fr 1fr;gap:14px}
+    /* nestas duas o que importa é a área de leitura e o campo de escrever:
+       a legenda do cabeçalho custa três linhas de tela e não ajuda ninguém aqui */
+    #chat .page-sub,#console .page-sub{display:none}
+  }
+
+  /* seis abas não cabem com folga em tela pequena: aperta em vez de quebrar */
+  @media (max-width:430px){
+    .tab{font-size:9px;padding:4px 2px;gap:2px}
+    .tab svg{width:19px;height:19px}
+  }
+
+  /* tabela vira lista em telas estreitas */
+  @media (max-width:640px){
+    .ptable thead{display:none}
+    .ptable tbody td{border:none;padding:0}
+    .ptable tbody tr{display:grid;grid-template-columns:1fr auto;gap:8px 10px;
+      padding:11px 4px;border-bottom:1px solid var(--line-soft);align-items:center}
+    .ptable tbody tr:hover{background:transparent}
+    .ptable td[data-c="sessao"]{text-align:right;font-size:12px}
+    .ptable td[data-c="acoes"]{grid-column:1/-1}
+    .tacts{justify-content:flex-start;flex-wrap:wrap}
+  }
+
+  /* ---------- login ---------- */
+  .gate{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;
+    background:
+      radial-gradient(900px 460px at 50% -10%, rgba(109,175,67,.10), transparent 62%),
+      var(--bg)}
+  .gate.hidden{display:none}
+  .gate-card{width:100%;max-width:360px;background:var(--elev);border:1px solid var(--line);
+    border-radius:16px;box-shadow:var(--shadow);padding:26px 24px;animation:rise .35s both}
+  .gate-brand{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  .gate-brand .brand-name{font-size:17px}
+  .gate form{display:flex;flex-direction:column;gap:13px}
+  .gate .err{font-size:12px;color:var(--red);min-height:16px}
+  .gate .btn.pri{width:100%;padding:11px}
+
+  /* ---------- toasts ---------- */
+  .toasts{position:fixed;right:16px;bottom:16px;z-index:140;display:flex;flex-direction:column;
+    gap:8px;max-width:340px}
+  .toast{background:var(--elev-2);border:1px solid var(--line);border-left:3px solid var(--grass);
+    border-radius:10px;padding:10px 13px;font-size:12.5px;box-shadow:var(--shadow);
+    animation:rise .2s both}
+  .toast.bad{border-left-color:var(--red)}
+  .toast .cmd{font-family:"JetBrains Mono",monospace;color:var(--faint);font-size:11px;display:block}
+  @media (max-width:920px){.toasts{left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom));max-width:none}}
+
+  /* ---------- avisos e estados ---------- */
+  /* block, NUNCA flex: o texto destes avisos tem <span class="mono"> no meio, e como
+     item flex cada span virava uma coluna própria — era o que desalinhava o modal. */
+  .banner{display:block;padding:11px 13px;border-radius:10px;
+    background:rgba(224,179,65,.1);border:1px solid rgba(224,179,65,.3);color:var(--amber);
+    font-size:12.5px;line-height:1.55;margin-bottom:14px}
+  .banner .mono{color:#F0CE7A}
+  .banner.off{background:rgba(229,83,75,.1);border-color:rgba(229,83,75,.3);color:var(--red)}
+  .pill.off{background:rgba(229,83,75,.14);border-color:rgba(229,83,75,.3);color:var(--red)}
+  .pill.off .dot{background:var(--red);animation:none}
+  .hint{font-size:11px;color:var(--faint);margin-top:8px}
+  .wl-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .wl-head .toggle{font-size:12px;color:var(--dim)}
+  .modal .banner{margin:0}
+  [disabled]{opacity:.5;pointer-events:none}
+  .busy{opacity:.55}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== MARCA =====
+     Os dois símbolos usados na interface inteira. Ficam aqui, inline, porque
+     <use> não alcança gradiente dentro de arquivo externo — e o mesmo desenho
+     está em favicon.svg para a aba do navegador. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="cc-aco" x1=".15" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#C2CDD8"/><stop offset=".38" stop-color="#8A959F"/>
+      <stop offset=".72" stop-color="#5A6570"/><stop offset="1" stop-color="#3D4650"/>
+    </linearGradient>
+    <linearGradient id="cc-grama" x1=".1" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#AEEE63"/><stop offset="1" stop-color="#6DAF43"/>
+    </linearGradient>
+    <path id="cc-anel" fill-rule="evenodd"
+          d="M32 2 58 17v30L32 62 6 47V17Z M32 12.5 48.9 22.25v19.5L32 51.5 15.1 41.75v-19.5Z"/>
+    <mask id="cc-boca">
+      <rect width="64" height="64" fill="#fff"/>
+      <rect x="43" y="23.5" width="21" height="13.5" fill="#000"/>
+    </mask>
+    <clipPath id="cc-dente"><rect x="43" y="37" width="21" height="16"/></clipPath>
+
+    <!-- bloco de grama sozinho: é o rosto de um servidor, não da marca -->
+    <symbol id="cc-block" viewBox="0 0 64 64">
+      <path fill="#8A5E34" d="M8 21 32 35v22L8 43Z"/>
+      <path fill="#5E4023" d="M32 35 56 21v22L32 57Z"/>
+      <path fill="#6DAF43" d="M8 21 32 35v7L8 28Z"/>
+      <path fill="#54903A" d="M32 35 56 21v7L32 42Z"/>
+      <path fill="url(#cc-grama)" d="M32 7 56 21 32 35 8 21Z"/>
+    </symbol>
+
+    <symbol id="cc-mark" viewBox="0 0 64 64">
+      <use href="#cc-anel" fill="url(#cc-aco)" mask="url(#cc-boca)"/>
+      <use href="#cc-anel" fill="#8CDB62" clip-path="url(#cc-dente)"/>
+      <path fill="#8A5E34" d="M22 25.8 32 31.6v12L22 37.8Z"/>
+      <path fill="#5E4023" d="M32 31.6 42 25.8v12l-10 5.8Z"/>
+      <path fill="#6DAF43" d="M22 25.8 32 31.6v3.1l-10-5.8Z"/>
+      <path fill="#54903A" d="M32 31.6 42 25.8v3.1l-10 5.8Z"/>
+      <path fill="url(#cc-grama)" d="M32 20 42 25.8 32 31.6 22 25.8Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <!-- a marca é o caminho de volta pra visão geral, como em qualquer site -->
+    <button class="brand" data-view="painel" title="Voltar para a visão geral">
+      <svg class="brand-mark"><use href="#cc-mark"/></svg>
+      <div>
+        <div class="brand-name">Craft<b>Control</b></div>
+        <div class="brand-sub" id="brand-sub">painel do servidor</div>
+      </div>
+    </button>
+    <nav class="nav">
+      <div class="nav-label">Servidor</div>
+      <div class="nav-item active" data-view="painel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Visão geral
+      </div>
+      <div class="nav-item" data-view="jogadores">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 20c0-2.4-1-4.3-2.6-5.2"/></svg>
+        Jogadores <span class="badge" id="nav-pcount">4</span>
+      </div>
+      <div class="nav-item" data-view="chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></svg>
+        Chat
+      </div>
+      <div class="nav-item" data-view="console">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+        Console
+      </div>
+      <div class="nav-item" data-view="moderacao">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>
+        Moderação <span class="badge" id="nav-bcount">2</span>
+      </div>
+      <div class="nav-item" data-view="mods">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.6l8 4.2v10.4l-8 4.2-8-4.2V6.8z"/><path d="M4 6.8l8 4.2 8-4.2M12 11v10.4"/></svg>
+        Mods <span class="badge" id="nav-mcount"></span>
+      </div>
+      <div class="nav-item" data-view="servidor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+        Servidor
+      </div>
+      <div class="nav-label">Mais</div>
+      <div class="nav-item" data-view="mais">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+        Roadmap
+      </div>
+    </nav>
+    <div class="side-foot">
+      <!-- ícone em vez de avatar: quem entra no painel é uma conta de administração,
+           não tem skin nem foto — o quadrado vazio de antes só parecia imagem quebrada -->
+      <div class="av">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+          <circle cx="12" cy="8.4" r="3.6"/><path d="M4.8 20c0-3.6 3.2-6.1 7.2-6.1s7.2 2.5 7.2 6.1"/>
+        </svg>
+      </div>
+      <div class="quem" id="quem-sou">–<span>admin</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div class="server-id">
+        <svg class="srv-cube"><use href="#cc-block"/></svg>
+        <div class="server-meta">
+          <div class="server-name">
+            <!-- com um servidor só isto é texto puro (classe .solo); com dois ou mais vira menu -->
+            <button class="srv-pick solo" id="srvPick" aria-haspopup="listbox" aria-expanded="false">
+              <span id="srv-name">Servidor</span>
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <!-- o rótulo inteiro vem do JS: "1/5 online" ou "fora do ar" -->
+            <span class="pill" id="srv-pill"><span class="dot"></span><span id="pill-count">–</span></span>
+          </div>
+          <!-- no celular a barra do topo esconde uptime/versão por falta de espaço;
+               eles voltam aqui, na mesma linha do endereço -->
+          <div class="server-addr"><span id="srv-addr">conectando…</span><span class="addr-extra" id="srv-extra"></span></div>
+        </div>
+        <div class="srv-menu" id="srvMenu" role="listbox"></div>
+      </div>
+      <div class="top-stats">
+        <div class="tstat"><div class="k">Uptime</div><div class="v" id="srv-uptime">–</div></div>
+        <div class="tstat"><div class="k">Versão</div><div class="v" id="srv-version">–</div></div>
+      </div>
+      <button class="add-srv" id="addServerBtn" title="Adicionar servidor" aria-label="Adicionar servidor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Servidor</span>
+      </button>
+    </header>
+
+    <div class="content">
+
+      <!-- ===== VISÃO GERAL ===== -->
+      <section class="view active" id="painel">
+        <div class="overview">
+
+          <!-- métricas do host -->
+          <div class="card a-stats">
+            <div class="statgrid">
+              <!-- ocupa a linha inteira: é o número do servidor, o resto é da máquina -->
+              <div class="stat tps" id="st-tps-wrap">
+                <div class="k">TPS <span class="tps-tag" id="st-tps-tag"></span></div>
+                <div class="v"><span id="st-tps">–</span></div>
+                <div class="bar"><i id="st-tps-bar"></i></div>
+                <div class="sub" id="st-tps-sub">medindo…</div>
+              </div>
+              <div class="stat">
+                <div class="k">CPU</div>
+                <div class="v"><span id="st-cpu">–</span></div>
+                <div class="bar"><i id="st-cpu-bar"></i></div>
+                <div class="sub" id="st-cpu-sub">–</div>
+              </div>
+              <div class="stat">
+                <div class="k">Memória</div>
+                <div class="v"><span id="st-mem">–</span></div>
+                <div class="bar"><i id="st-mem-bar"></i></div>
+                <div class="sub" id="st-mem-sub">–</div>
+              </div>
+              <div class="stat">
+                <div class="k">Disco</div>
+                <div class="v"><span id="st-disk">–</span></div>
+                <div class="bar"><i id="st-disk-bar"></i></div>
+                <div class="sub" id="st-disk-sub">–</div>
+              </div>
+              <div class="stat">
+                <div class="k">Carga</div>
+                <div class="v"><span id="st-load">–</span></div>
+                <div class="bar"><i id="st-load-bar"></i></div>
+                <div class="sub" id="st-load-sub">1, 5 e 15 min</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- players -->
+          <div class="card a-players">
+            <div class="card-head">
+              <div class="card-title">Jogadores online <span class="n" id="pcount">4/5</span></div>
+              <button class="ghost" data-goto="jogadores">Ver todos</button>
+            </div>
+            <div class="card-body scroll plist" id="painel-players"></div>
+          </div>
+
+          <!-- console -->
+          <div class="card console-card a-console">
+            <div class="card-head">
+              <div class="card-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--grass)" stroke-width="2"><path d="M4 6l4 4-4 4M12 16h8"/></svg>
+                Console ao vivo
+              </div>
+              <div class="toggle">auto-scroll <div class="sw on" data-sw role="switch" aria-checked="true"></div></div>
+            </div>
+            <div class="term" id="term"></div>
+            <div class="prompt">
+              <span class="car">&gt;</span>
+              <input id="cmd" placeholder="digite um comando…" autocomplete="off" spellcheck="false" aria-label="Comando">
+              <button class="send" id="send" aria-label="Enviar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+            </div>
+          </div>
+
+          <!-- quick commands -->
+          <div class="card a-quick">
+            <div class="card-head"><div class="card-title">Comandos rápidos</div></div>
+            <div class="card-body qcmd" id="quick"></div>
+          </div>
+
+          <!-- moderation -->
+          <div class="card a-mod">
+            <div class="card-head">
+              <div class="card-title">Moderação</div>
+              <button class="ghost" data-goto="moderacao">Abrir</button>
+            </div>
+            <div class="card-body">
+              <div class="modgrid">
+                <button class="modbtn danger" data-goto="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>Banir jogador</button>
+                <button class="modbtn ok" data-goto="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>Desbanir</button>
+                <button class="modbtn neutral" data-goto="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5h14v14H5z"/><path d="M9 9h6v6H9z"/></svg>Lista de bans</button>
+                <button class="modbtn ok" data-goto="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Whitelist</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ===== JOGADORES ===== -->
+      <section class="view" id="jogadores">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Jogadores</div>
+            <div class="page-sub">Quem está conectado agora — via <span class="mono">list</span></div>
+          </div>
+          <button class="ghost" onclick="runCmd('/list')">Atualizar</button>
+        </div>
+        <div class="subtabs" data-panes="online-wrap hist-wrap">
+          <div class="subtab active" data-sub="online-wrap">Online <span class="n" id="tab-on">0</span></div>
+          <div class="subtab" data-sub="hist-wrap">Histórico <span class="n" id="tab-hist">0</span></div>
+        </div>
+
+        <div id="online-wrap">
+          <div class="card">
+            <div class="card-head"><div class="card-title">Online <span class="n" id="pcount2">4/5</span></div></div>
+            <div class="card-body" style="padding:6px 10px">
+              <div class="table-wrap">
+                <table class="ptable">
+                  <thead><tr><th>Jogador</th><th>Tempo online</th><th style="text-align:right">Ações</th></tr></thead>
+                  <tbody id="table-players"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="hist-wrap" style="display:none">
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Quem já jogou aqui</div>
+              <span class="hint" id="hist-since" style="margin:0"></span>
+            </div>
+            <div class="card-body">
+              <div class="hlist" id="hist-list"><div class="empty">Carregando…</div></div>
+              <div class="hint">Reconstruído do log do servidor (entradas e saídas). O último logout vem do
+                arquivo do jogador no mundo, que é gravado quando ele desconecta.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CHAT ===== -->
+      <section class="view" id="chat">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Chat</div>
+            <div class="page-sub">A conversa do jogo — o que você escrever aqui aparece pra todo mundo</div>
+          </div>
+          <button class="ghost" id="chat-sys">ocultar entradas e saídas</button>
+        </div>
+        <div class="card" style="flex:1;min-height:0">
+          <div class="chatlist" id="chatlist"><div class="empty">Carregando…</div></div>
+          <div class="prompt">
+            <span class="car">&gt;</span>
+            <input id="chat-input" placeholder="mensagem para todos…" autocomplete="off" maxlength="256" aria-label="Mensagem">
+            <button class="send" id="chat-send" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CONSOLE FULL ===== -->
+      <section class="view" id="console">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Console</div>
+            <div class="page-sub">Qualquer comando do servidor, direto pelo RCON — <span class="mono">↑</span> repete o último</div>
+          </div>
+        </div>
+        <div class="card console-card" style="flex:1;min-height:0">
+          <div class="card-head">
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--grass)" stroke-width="2"><path d="M4 6l4 4-4 4M12 16h8"/></svg>Saída ao vivo</div>
+            <div class="toggle">auto-scroll <div class="sw on" data-sw role="switch" aria-checked="true"></div></div>
+          </div>
+          <div class="term" id="term2"></div>
+          <div class="prompt">
+            <span class="car">&gt;</span>
+            <input id="cmd2" placeholder="say, tp, give, whitelist…" autocomplete="off" spellcheck="false" aria-label="Comando">
+            <button class="send" id="send2" aria-label="Enviar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MODERAÇÃO ===== -->
+      <section class="view" id="moderacao">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Moderação</div>
+            <div class="page-sub">Banidos e whitelist — tudo vira comando RCON</div>
+          </div>
+        </div>
+        <div class="subtabs" data-panes="bans-wrap wl-wrap">
+          <div class="subtab active" data-sub="bans-wrap">Banidos <span class="n" id="tab-bans">0</span></div>
+          <div class="subtab" data-sub="wl-wrap">Whitelist <span class="n" id="tab-wl">0</span></div>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div id="bans-wrap">
+              <div class="listgrid" id="bans-panel"></div>
+            </div>
+            <div id="wl-wrap" style="display:none">
+              <div class="banner">
+                <span>Com a whitelist ligada só entra quem está na lista — e quem estiver online fora dela
+                  cai na hora (<span class="mono">enforce-whitelist=true</span>). Operadores passam sempre.
+                  Como o servidor está em <span class="mono">online-mode=true</span>, o
+                  <span class="mono">whitelist add</span> resolve o nick na Mojang: conta pirata não entra na lista.</span>
+              </div>
+              <div class="wl-head">
+                <div class="toggle">whitelist <span id="wl-state" class="mono">–</span>
+                  <div class="sw" id="wl-toggle" role="switch" aria-checked="false"></div>
+                </div>
+                <button class="ghost" id="wl-fill">Adicionar quem já jogou</button>
+              </div>
+              <div class="listgrid" id="wl-panel"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SERVIDOR ===== -->
+      <section class="view" id="servidor">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Servidor</div>
+            <div class="page-sub">Energia do contêiner e backup do mundo</div>
+          </div>
+          <button class="ghost" data-goto="mais">Roadmap</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">
+            <div class="card-title">Energia</div>
+            <span class="pill" id="pw-pill"><span class="dot"></span><span id="pw-state">–</span></span>
+          </div>
+          <div class="card-body">
+            <div class="modgrid">
+              <button class="modbtn neutral" id="pw-restart">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-.6 4"/><path d="M20 4v7h-7"/></svg>
+                Reiniciar
+              </button>
+              <button class="modbtn danger" id="pw-stop">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                Parar
+              </button>
+              <button class="modbtn ok" id="pw-start">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 5.5l11 6.5-11 6.5z"/></svg>
+                Iniciar
+              </button>
+            </div>
+            <div class="hint" id="pw-hint">O painel manda <span class="mono">save-all flush</span> antes de desligar, e o
+              contêiner recebe até 90&nbsp;s pra salvar o mundo e sair sozinho — nada de SIGKILL no meio de uma gravação.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">
+            <div class="card-title">Reinício automático</div>
+            <div class="toggle"><span id="ag-estado" class="mono">–</span>
+              <div class="sw" id="ag-ativo" role="switch" aria-checked="false"></div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="ag-proximo" id="ag-proximo">–</div>
+
+            <div class="ag-linha">
+              <label class="ag-campo">
+                <span>Horário</span>
+                <input type="time" id="ag-hora" value="05:00">
+              </label>
+              <div class="ag-campo" style="flex:1;min-width:220px">
+                <span>Dias</span>
+                <div class="ag-dias" id="ag-dias"></div>
+              </div>
+            </div>
+
+            <label class="ag-check">
+              <input type="checkbox" id="ag-pular-gente">
+              <span>Não reiniciar se tiver alguém online <em>— o horário passa em branco e fica pro próximo</em></span>
+            </label>
+
+            <div class="ag-rodape">
+              <div class="hint" style="margin:0">Avisa no chat <span class="mono" id="ag-avisos">15, 5 e 1 min</span> antes,
+                manda <span class="mono">save-all flush</span> e reinicia o contêiner. Backup ou restauração em andamento adiam por 5 min.</div>
+              <div class="ag-botoes">
+                <button class="btn sec" id="ag-pular">Cancelar o próximo</button>
+                <button class="btn pri" id="ag-salvar">Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title">Backup do mundo</div></div>
+          <div class="card-body">
+            <div class="bk">
+              <div class="bk-info">
+                <div class="bk-size" id="bk-size">–<span> em disco</span></div>
+                <div class="hint" style="margin-top:4px">compactado sai por volta da metade disso</div>
+              </div>
+              <button class="btn pri big" id="bk-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+                Baixar backup
+              </button>
+            </div>
+            <div class="steps">
+              <div class="step"><span class="n">1</span>O painel manda <span class="mono">save-off</span> e <span class="mono">save-all flush</span> — o mundo para de gravar e fica consistente.</div>
+              <div class="step"><span class="n">2</span>A pasta <span class="mono">world</span> vira um <span class="mono">.tar.gz</span> que sai direto na resposta: nada é gravado no disco do servidor.</div>
+              <div class="step"><span class="n">3</span>No fim (ou se você cancelar o download) o <span class="mono">save-on</span> volta sozinho.</div>
+            </div>
+            <div class="banner" style="margin:16px 0 0">
+              <span>Dá pra jogar durante o backup, mas o que acontecer no mundo enquanto ele roda
+                só é gravado depois. Este mundo leva cerca de 30&nbsp;s na rede local — não feche a aba.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><div class="card-title">Restaurar um backup</div></div>
+          <div class="card-body">
+            <div class="bk">
+              <div class="bk-info">
+                <div class="hint" style="margin:0">Envie um <span class="mono">.tar.gz</span> gerado aqui pelo painel.
+                  O mundo de agora <b>não é apagado</b>: ele fica guardado ao lado, e dá pra voltar pra ele.</div>
+              </div>
+              <input type="file" id="rs-file" accept=".gz,.tgz,application/gzip" style="display:none">
+              <button class="btn pri big" id="rs-pick">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21V9M7 13l5-5 5 5M4 4h16"/></svg>
+                Escolher arquivo
+              </button>
+            </div>
+
+            <div class="steps">
+              <div class="step"><span class="n">1</span>O pacote sobe e é conferido <b>com o servidor ainda no ar</b> — arquivo estragado falha sem derrubar ninguém.</div>
+              <div class="step"><span class="n">2</span>Só então o servidor para, e a troca são dois <span class="mono">rename</span>: fica fora do ar por segundos, não por minutos.</div>
+              <div class="step"><span class="n">3</span>O mundo antigo vira <span class="mono">world.antes-de-…</span> ao lado, e o servidor sobe de volta sozinho.</div>
+            </div>
+
+            <div id="rs-andamento" style="display:none;margin-top:16px">
+              <div class="bar"><i id="rs-bar"></i></div>
+              <div class="hint" id="rs-fase" style="margin-top:8px">–</div>
+            </div>
+
+            <div id="rs-guardados" style="margin-top:18px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MODS =====
+           Fase 1: só leitura. Nada aqui escreve na pasta de mods — instalar,
+           remover e desativar vêm depois, e cada um precisa da sua confirmação. -->
+      <section class="view" id="mods">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Mods</div>
+            <div class="page-sub" id="mods-sub">Lendo a pasta…</div>
+          </div>
+          <div class="mods-acoes">
+            <input id="mods-busca" class="mods-filtro" type="search" placeholder="filtrar por nome…" autocomplete="off">
+            <button class="ghost" id="mods-recarregar">Reler</button>
+            <button class="add-srv" id="mods-add">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Adicionar</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="banner off" id="mods-aviso" style="display:none"></div>
+
+        <!-- mudança em mod só entra no próximo boot: o aviso fica até o servidor subir -->
+        <div class="banner mods-pend" id="mods-pendente" style="display:none">
+          <span id="mods-pendente-txt"></span>
+          <button class="btn pri" id="mods-aplicar">Aplicar e reiniciar</button>
+        </div>
+
+        <!-- progresso do aplicar: o painel reinicia, vigia o boot e desfaz se falhar -->
+        <div class="banner mods-pend" id="mods-aplicando" style="display:none">
+          <span id="mods-aplicando-txt"></span>
+        </div>
+
+        <div class="banner mods-pend" id="mods-novos-banner" style="display:none">
+          <span id="mods-novos-txt"></span>
+          <button class="btn pri" id="mods-atualizar-todos">Atualizar todos</button>
+        </div>
+
+        <div class="subtabs" id="mods-abas">
+          <div class="subtab active" data-mods="ativos">Ativos <span class="n" id="mods-n-ativos">0</span></div>
+          <div class="subtab" data-mods="off">Desativados <span class="n" id="mods-n-off">0</span></div>
+        </div>
+
+        <div class="mods-resumo" id="mods-resumo" style="display:none">
+          <div class="mstat"><span class="k">Instalados</span><span class="v mono" id="mods-total">–</span></div>
+          <div class="mstat"><span class="k">Em disco</span><span class="v mono" id="mods-bytes">–</span></div>
+          <div class="mstat"><span class="k">Com atualização</span><span class="v mono" id="mods-novos">–</span></div>
+          <div class="mstat"><span class="k">Só de cliente</span><span class="v mono" id="mods-cliente">–</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="mlist" id="mods-lista">
+              <div class="empty">Carregando…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ROADMAP ===== -->
+      <section class="view" id="mais">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Roadmap</div>
+            <div class="page-sub">O que ficou para a próxima rodada</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body roadmap">
+            <div class="ritem">Push no celular quando alguém entra<span class="rtag">fase 3</span></div>
+            <div class="ritem">Gráfico de TPS ao longo do dia<span class="rtag">fase 3</span></div>
+            <div class="ritem">Backup automático no horário<span class="rtag">fase 3</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE TAB BAR -->
+<nav class="tabbar">
+  <button class="tab active" data-view="painel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Painel</button>
+  <button class="tab" data-view="jogadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><path d="M16 5.2a3 3 0 0 1 0 5.6"/></svg>Jogadores</button>
+  <button class="tab" data-view="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></svg>Chat</button>
+  <button class="tab" data-view="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>Console</button>
+  <button class="tab" data-view="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>Moderar</button>
+  <button class="tab" data-view="mods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.6l8 4.2v10.4l-8 4.2-8-4.2V6.8z"/><path d="M4 6.8l8 4.2 8-4.2M12 11v10.4"/></svg>Mods</button>
+  <button class="tab" data-view="servidor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Servidor</button>
+</nav>
+
+<!-- ADD SERVER MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Adicionar servidor">
+    <div class="modal-head">
+      <h3>Adicionar servidor</h3>
+      <button class="icon-btn" id="modalClose" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="banner">Servidor é configuração, não cadastro: o painel precisa enxergar a pasta de dados
+        e o contêiner dele, e isso quem define é o <span class="mono">compose.yaml</span>. Em troca, o servidor novo
+        já nasce com console, chat, histórico, backup, restauração e energia — nada de meio painel.</div>
+      <div class="steps" style="margin-top:16px">
+        <div class="step"><span class="n">1</span>Suba o servidor novo no mesmo <span class="mono">compose.yaml</span>
+          (pasta própria, ex.: <span class="mono">./data2</span>, e outra porta).</div>
+        <div class="step"><span class="n">2</span>Monte a pasta dele no painel: <span class="mono">- ./data2:/mcdata2</span>.</div>
+        <div class="step"><span class="n">3</span>Acrescente um objeto na variável <span class="mono">MC_SERVERS</span>
+          com <span class="mono">id</span>, <span class="mono">nome</span>, <span class="mono">rconHost</span>,
+          <span class="mono">dados</span> e <span class="mono">container</span>.</div>
+        <div class="step"><span class="n">4</span>Inclua o contêiner novo no regex do
+          <span class="mono">socketproxy</span> — sem isso os botões de energia respondem 403.</div>
+      </div>
+      <div class="hint" style="margin-top:14px">O passo a passo completo, com um exemplo pronto pra copiar,
+        está no <span class="mono">README.md</span> do painel.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sec" id="modalCancel">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROMPT MODAL (motivo do ban, mensagem, nick da whitelist) -->
+<!-- ===== ADICIONAR MOD =====
+     Duas portas: o catálogo (seguro, já filtrado pelo carregador e versão deste
+     servidor) e o arquivo à mão (quando o mod não está no Modrinth). -->
+<div class="overlay" id="addmod">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3>Adicionar mod</h3>
+      <button class="icon-btn" id="addmod-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="subtabs" id="addmod-abas" style="width:100%">
+        <div class="subtab active" data-add="buscar">Buscar no Modrinth</div>
+        <div class="subtab" data-add="enviar">Enviar arquivo</div>
+      </div>
+
+      <div id="addmod-pane-buscar">
+        <div class="hint" id="addmod-escopo" style="margin:0 0 10px"></div>
+        <div class="field">
+          <input id="addmod-q" placeholder="nome do mod…" autocomplete="off">
+        </div>
+        <div class="mrlist" id="addmod-res"></div>
+      </div>
+
+      <div id="addmod-pane-enviar" style="display:none">
+        <div class="banner" style="margin:0 0 12px">
+          Um <span class="mono">.jar</span> é código que roda dentro do servidor com acesso total.
+          Só envie arquivo de origem em que você confia.
+        </div>
+        <input type="file" id="addmod-file" accept=".jar,application/java-archive" style="display:none">
+        <button class="btn pri big" id="addmod-escolher" style="width:100%;justify-content:center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          Escolher arquivo .jar
+        </button>
+        <div id="addmod-progresso" style="display:none;margin-top:14px">
+          <div class="bar"><i id="addmod-barra"></i></div>
+          <div class="hint" id="addmod-status"></div>
+        </div>
+        <div class="banner off" id="addmod-recusa" style="display:none;margin-top:14px"></div>
+        <div class="steps" id="addmod-forcar-wrap" style="display:none">
+          <button class="btn sec" id="addmod-forcar" style="width:100%">Enviar mesmo assim (fica desativado)</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sec" id="addmod-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ask">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="ask-title">Confirmar</h3>
+      <button class="icon-btn" id="ask-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="ask-text" class="hint" style="margin:0"></div>
+      <div class="field"><label id="ask-label">Valor</label><input id="ask-input" autocomplete="off"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sec" id="ask-no">Cancelar</button>
+      <button class="btn pri" id="ask-yes">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <svg class="brand-mark"><use href="#cc-mark"/></svg>
+      <div>
+        <div class="brand-name">Craft<b>Control</b></div>
+        <div class="brand-sub">acesso restrito</div>
+      </div>
+    </div>
+    <form id="login-form">
+      <div class="field"><label>Usuário</label><input id="login-user" autocomplete="username" required></div>
+      <div class="field"><label>Senha</label><input id="login-pass" type="password" autocomplete="current-password" required></div>
+      <div class="err" id="login-err"></div>
+      <button class="btn pri" type="submit" id="login-btn">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+  /* ==========================================================
+     Painel MC — cliente da API (/api)
+     Todo botão daqui vira um comando RCON no backend.
+     ========================================================== */
+
+  // API é a raiz do servidor selecionado e muda quando se troca de servidor;
+  // RAIZ é o que não pertence a nenhum (login e a lista de servidores).
+  const RAIZ = "/api";
+  let API = "/api/servers/principal";
+  let srvId = localStorage.getItem("mcpanel_srv") || "";
+  let token = localStorage.getItem("mcpanel_token") || "";
+  let usuario = localStorage.getItem("mcpanel_user") || "";
+  let lastSeq = 0;
+  let st = null;
+  let timer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
+  /* ---------------- http ---------------- */
+
+  async function api(path, opts = {}, base = API) {
+    const res = await fetch(base + path, {
+      ...opts,
+      headers: {
+        // só declara JSON quando há corpo — DELETE vazio com content-type quebra o parser
+        ...(opts.body ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    if (res.status === 401) { logout(); throw new Error("sessão expirada"); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `erro ${res.status}`);
+    return data;
+  }
+  const post = (p, body) => api(p, { method: "POST", body: JSON.stringify(body || {}) });
+  const put = (p, body) => api(p, { method: "PUT", body: JSON.stringify(body || {}) });
+  const del = (p) => api(p, { method: "DELETE" });
+  const apiRaiz = (p, opts) => api(p, opts, RAIZ);
+
+  /**
+   * PUT de arquivo cru com barra de progresso — XHR porque fetch não expõe
+   * progresso de upload. Resolve com o corpo JSON; rejeita com o `status` e o
+   * resto do corpo do erro anexados (é assim que o `veredito` do upload de mod
+   * chega inteiro ao chamador). Serve o restore do mundo e o envio de jar.
+   */
+  function uploadArquivo(url, arquivo, contentType, aoProgredir) {
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open("PUT", url);
+      x.setRequestHeader("Authorization", "Bearer " + token);
+      x.setRequestHeader("Content-Type", contentType);
+      x.upload.onprogress = (e) => { if (e.lengthComputable) aoProgredir(e.loaded, e.total); };
+      x.onload = () => {
+        let corpo = {};
+        try { corpo = JSON.parse(x.responseText); } catch { /* resposta não-JSON */ }
+        if (x.status >= 200 && x.status < 300) return resolve(corpo);
+        reject(Object.assign(new Error(corpo.error || `erro ${x.status}`), { status: x.status, ...corpo }));
+      };
+      x.onerror = () => reject(new Error("a conexão caiu durante o envio"));
+      x.send(arquivo);
+    });
+  }
+
+  /* ---------------- toasts ---------------- */
+
+  function toast(msg, bad = false, sub = "") {
+    const el = document.createElement("div");
+    el.className = "toast" + (bad ? " bad" : "");
+    el.innerHTML = esc(msg) + (sub ? `<span class="cmd">${esc(sub)}</span>` : "");
+    $("toasts").appendChild(el);
+    setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 250); }, bad ? 6000 : 3200);
+  }
+
+  /* ---------------- modal de pergunta ---------------- */
+
+  let askResolve = null;
+  function ask({ title, label, text = "", value = "", placeholder = "", confirm = "Confirmar" }) {
+    $("ask-title").textContent = title;
+    $("ask-label").textContent = label;
+    $("ask-text").textContent = text;
+    $("ask-text").style.display = text ? "" : "none";
+    $("ask-yes").textContent = confirm;
+    const inp = $("ask-input");
+    inp.value = value; inp.placeholder = placeholder;
+    $("ask").classList.add("open");
+    setTimeout(() => inp.focus(), 40);
+    return new Promise((resolve) => { askResolve = resolve; });
+  }
+  function closeAsk(result) {
+    $("ask").classList.remove("open");
+    if (askResolve) { askResolve(result); askResolve = null; }
+  }
+  $("ask-yes").onclick = () => closeAsk($("ask-input").value.trim());
+  $("ask-no").onclick = () => closeAsk(null);
+  $("ask-x").onclick = () => closeAsk(null);
+  $("ask").onclick = (e) => { if (e.target === $("ask")) closeAsk(null); };
+  $("ask-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); closeAsk($("ask-input").value.trim()); }
+  });
+
+  /**
+   * O ritual "digite a PALAVRA para confirmar" das ações perigosas. Devolve
+   * true só com a palavra exata; fechar o modal cancela em silêncio, palavra
+   * errada avisa. Estava copiado em cada ação — e cada cópia com um toast seu.
+   */
+  async function confirmarCom(palavra, opts) {
+    const ok = await ask({
+      ...opts,
+      label: `digite ${palavra} para confirmar`,
+      placeholder: palavra,
+    });
+    if (ok === palavra) return true;
+    if (ok !== null) toast(`cancelado: era preciso digitar ${palavra}`, true);
+    return false;
+  }
+
+  /* ---------------- login ---------------- */
+
+  function showGate() { $("gate").classList.remove("hidden"); setTimeout(() => $("login-user").focus(), 60); }
+  function hideGate() { $("gate").classList.add("hidden"); }
+
+  function logout() {
+    token = "";
+    localStorage.removeItem("mcpanel_token");
+    stopPolling();
+    showGate();
+  }
+
+  /** Quem está logado, no rodapé da barra lateral. */
+  function renderQuemSou() {
+    $("quem-sou").firstChild.textContent = usuario || "–";
+  }
+
+  $("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("login-btn");
+    btn.disabled = true; $("login-err").textContent = "";
+    try {
+      const r = await fetch(RAIZ + "/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: $("login-user").value, password: $("login-pass").value }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "falha no login");
+      token = data.token;
+      localStorage.setItem("mcpanel_token", token);
+      if (data.user) { usuario = data.user; localStorage.setItem("mcpanel_user", usuario); }
+      $("login-pass").value = "";
+      $("login-user").value = "";
+      hideGate();
+      await start();
+    } catch (err) {
+      $("login-err").textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ---------------- formatação ---------------- */
+
+  function elapsed(iso) {
+    if (!iso) return "–";
+    const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
+    if (m) return `${m}m`;
+    return `${s}s`;
+  }
+
+  function avatarColor(nick) {
+    let h = 0;
+    for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) % 360;
+    return `hsl(${h} 32% 38%)`;
+  }
+
+  // a cabeça vem do mc-heads, buscada pelo próprio navegador. Sem internet aqui
+  // (ou nick que não existe na Mojang) o onerror tira a imagem e sobra o bloco colorido.
+  const avatar = (nick) => `<span class="head-av px" style="background:${avatarColor(nick)}">` +
+    `<img src="https://mc-heads.net/avatar/${encodeURIComponent(nick)}/64" alt="" loading="lazy"` +
+    ` referrerpolicy="no-referrer" onerror="this.remove()"></span>`;
+
+  function quando(ms) {
+    if (!ms) return "sem registro";
+    const d = new Date(ms);
+    // dias de calendário, não 24h corridas: às 10h da manhã, 23h de ontem é "ontem"
+    const zera = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y.getTime(); };
+    const dias = Math.round((zera(Date.now()) - zera(ms)) / 86400000);
+    const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (dias <= 0) return `hoje ${hora}`;
+    if (dias === 1) return `ontem ${hora}`;
+    if (dias < 7) return `há ${dias} dias`;
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  }
+
+  function quandoDia(d) {
+    const zera = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y.getTime(); };
+    const dias = Math.round((zera(Date.now()) - zera(d)) / 86400000);
+    if (dias <= 0) return "hoje";
+    if (dias === 1) return "ontem";
+    return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" });
+  }
+
+  function duracao(ms) {
+    const min = Math.floor(ms / 60000);
+    const h = Math.floor(min / 60);
+    return h ? `${h}h${String(min % 60).padStart(2, "0")}` : `${min}min`;
+  }
+
+  const bytes = (n) => {
+    if (!n) return "–";
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(n < 10 && i > 1 ? 1 : 0)} ${u[i]}`;
+  };
+
+  /**
+   * Versão de mod sem o sufixo de build que repete o carregador e a versão do
+   * jogo — `21.0.64+fabric-1.21.1` vira `21.0.64`. O cabeçalho da aba já diz
+   * "Fabric · 1.21.1", então isso é ruído em toda linha e custa uns 60px que
+   * fazem falta para o nome do mod.
+   *
+   * Corta pouco de propósito: só `+` seguido de número (com nome de carregador
+   * na frente ou não) e `+`/`-` com nome de carregador no fim. Assim
+   * `1.13.13+kotlin.2.4.10`, `1.9.3+mod` e `1-v6.9.6` ficam intactos — ali o
+   * sufixo é informação de verdade. Na dúvida, não mexe: o valor cheio está
+   * sempre no title.
+   */
+  function versaoCurta(v) {
+    if (!v) return v;
+    const curta = String(v)
+      .replace(/\+(?:fabric|forge|neoforge|quilt|mc)?[-_]?\d[\w.-]*$/i, "")
+      .replace(/[-+](?:fabric|forge|neoforge|quilt)$/i, "")
+      .trim();
+    return curta || String(v);
+  }
+
+  /* ---------------- render ---------------- */
+
+  function renderTop() {
+    const s = st.server;
+    $("srv-name").textContent = s.name;
+    $("srv-addr").textContent = s.address || "—";
+    $("srv-version").textContent = s.version || "–";
+    $("srv-uptime").textContent = s.startedAt ? elapsed(s.startedAt) : "–";
+    // só aparece no celular (CSS): repõe o que a barra do topo esconde lá
+    $("srv-extra").textContent = s.online && s.startedAt ? ` · ${elapsed(s.startedAt)} no ar` : "";
+    $("pill-count").textContent = s.online ? `${s.count}/${s.max ?? "?"} online` : "fora do ar";
+    $("srv-pill").classList.toggle("off", !s.online);
+    document.title = `${s.name} — CraftControl`;
+    renderSeletor(st.servers || []);
+  }
+
+  /**
+   * Seletor de servidor. Com um servidor só, o nome no topo continua sendo
+   * texto — um menu de uma opção só seria ruído. A lista vem junto do /state,
+   * então ela se atualiza sozinha no mesmo polling de 2s.
+   */
+  function renderSeletor(servidores) {
+    const pick = $("srvPick");
+    pick.classList.toggle("solo", servidores.length < 2);
+    if (servidores.length < 2) { $("srvMenu").classList.remove("open"); return; }
+    // com o menu aberto, não reconstruir: o polling trocaria o botão embaixo do clique
+    if ($("srvMenu").classList.contains("open")) return;
+
+    $("srvMenu").innerHTML = servidores.map((s) => `
+      <button class="srv-opt${s.id === srvId ? " sel" : ""}${s.online ? "" : " off"}" data-srv="${esc(s.id)}" role="option">
+        <span class="bolha"></span>
+        <span class="quem"><b>${esc(s.nome)}</b><span>${s.online ? `${s.count}/${s.max ?? "?"} online` : "fora do ar"}</span></span>
+      </button>`).join("");
+  }
+
+  function fecharMenuSrv() {
+    $("srvMenu").classList.remove("open");
+    $("srvPick").classList.remove("open");
+    $("srvPick").setAttribute("aria-expanded", "false");
+  }
+
+  $("srvPick").onclick = (e) => {
+    e.stopPropagation();
+    const aberto = $("srvMenu").classList.toggle("open");
+    $("srvPick").classList.toggle("open", aberto);
+    $("srvPick").setAttribute("aria-expanded", String(aberto));
+  };
+
+  $("srvMenu").onclick = (e) => {
+    const opt = e.target.closest("[data-srv]");
+    if (opt) trocarServidor(opt.dataset.srv);
+  };
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".server-id")) fecharMenuSrv();
+  });
+
+  const faixa = (el, pct) => {
+    const i = $(el);
+    i.style.width = `${Math.max(0, Math.min(100, pct ?? 0))}%`;
+    i.className = pct >= 90 ? "bad" : pct >= 75 ? "warn" : "";
+  };
+
+  /**
+   * TPS medido pelo backend com comandos vanilla (nada de mod). A barra é
+   * invertida em relação às do host: aqui cheio é bom, 20 é o teto do jogo.
+   */
+  function renderTps() {
+    const t = st.tps;
+    const tag = $("st-tps-tag");
+    const sub = $("st-tps-sub");
+    const bar = $("st-tps-bar");
+    tag.textContent = "";
+
+    if (!st.server.online) {
+      $("st-tps").textContent = "–";
+      sub.textContent = "servidor fora do ar";
+      bar.style.width = "0%";
+      return;
+    }
+    const valor = t?.tps1m ?? t?.tps10s;
+    if (valor == null) {
+      $("st-tps").textContent = "–";
+      sub.textContent = t?.erro ? "sem medição: " + t.erro : "medindo…";
+      bar.style.width = "0%";
+      return;
+    }
+
+    $("st-tps").innerHTML = `${valor.toFixed(1)} <small>de 20</small>`;
+    // 19+ é o normal com folga; abaixo de 15 o jogo já parece travado
+    bar.style.width = `${Math.min(100, (valor / 20) * 100)}%`;
+    bar.className = valor < 15 ? "bad" : valor < 19 ? "warn" : "";
+
+    const mspt = t.tick?.mspt;
+    const partes = [];
+    if (mspt != null) partes.push(`${mspt.toFixed(1)} ms por tick`);
+    if (t.tick?.p99 != null) partes.push(`P99 ${t.tick.p99.toFixed(0)} ms`);
+    if (t.tps10s != null) partes.push(`${t.tps10s.toFixed(1)} nos últimos 10s`);
+    sub.textContent = partes.join(" · ") || "medindo…";
+
+    if (t.tick?.estado === "congelado") tag.textContent = "congelado";
+    else if (t.tick?.estado === "acelerado") tag.textContent = "acelerado";
+    else if (t.tickSuportado === false) tag.textContent = "sem tick query";
+  }
+
+  function renderHost() {
+    const h = st.host;
+    if (!h) return;
+
+    $("st-cpu").textContent = h.cpu == null ? "–" : `${h.cpu}%`;
+    faixa("st-cpu-bar", h.cpu);
+    $("st-cpu-sub").textContent = `${h.nucleos} núcleos`;
+
+    if (h.memoria) {
+      $("st-mem").innerHTML = `${h.memoria.pct}% <small>${esc(bytes(h.memoria.usado))} de ${esc(bytes(h.memoria.total))}</small>`;
+      faixa("st-mem-bar", h.memoria.pct);
+      $("st-mem-sub").textContent = `${bytes(h.memoria.total - h.memoria.usado)} livres`;
+    }
+    if (h.disco) {
+      $("st-disk").innerHTML = `${h.disco.pct}% <small>${esc(bytes(h.disco.usado))} de ${esc(bytes(h.disco.total))}</small>`;
+      faixa("st-disk-bar", h.disco.pct);
+      $("st-disk-sub").textContent = `${bytes(h.disco.disponivel)} livres`;
+    }
+    if (h.carga) {
+      // 100% = uma carga por núcleo; acima disso há processo esperando a vez
+      const pct = Math.round((h.carga[0] / h.nucleos) * 100);
+      $("st-load").textContent = h.carga[0].toFixed(2);
+      faixa("st-load-bar", pct);
+      $("st-load-sub").textContent = h.carga.map((n) => n.toFixed(2)).join("  ");
+    }
+  }
+
+  let powerOcupado = false;
+
+  function renderPower() {
+    const on = st.server.online;
+    $("pw-state").textContent = on ? "no ar" : "fora do ar";
+    $("pw-pill").classList.toggle("off", !on);
+    const semDocker = !st.power || !st.power.enabled;
+    ["pw-restart", "pw-stop", "pw-start"].forEach((id) => {
+      const b = $(id);
+      const inutil = id === "pw-start" ? on : !on;
+      b.toggleAttribute("disabled", powerOcupado || semDocker || inutil);
+    });
+    if (semDocker) {
+      $("pw-hint").textContent = "Controle do contêiner desligado: falta DOCKER_API no compose do painel.";
+    }
+  }
+
+  /* ---------------- reinício agendado ---------------- */
+
+  const DIAS_NOME = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  // enquanto o formulário está mexido, o polling de 2s não sobrescreve o que está na tela
+  let agSujo = false;
+
+  $("ag-dias").innerHTML = DIAS_NOME
+    .map((d, i) => `<button class="ag-dia" data-dia="${i}" aria-pressed="false">${d}</button>`).join("");
+
+  function agFormulario() {
+    return {
+      hora: $("ag-hora").value || "05:00",
+      dias: [...$("ag-dias").querySelectorAll(".ag-dia.on")].map((b) => Number(b.dataset.dia)),
+      pularSeTiverGente: $("ag-pular-gente").checked,
+    };
+  }
+
+  function agSujar() {
+    agSujo = true;
+    $("ag-salvar").disabled = false;
+  }
+
+  /**
+   * Contagem regressiva do próximo reinício. Nome diferente de propósito: esta e a
+   * `quando(ms)` lá de cima se chamavam igual, e como declaração de função a última
+   * vencia — o histórico e os mundos guardados, que são passado, saíam formatados
+   * como futuro ("último logout: sex às 14:32 · em 1 min").
+   */
+  function quandoFalta(iso) {
+    const d = new Date(iso);
+    const hoje = new Date();
+    const dia = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1);
+    const nome = dia(d, hoje) ? "hoje" : dia(d, amanha) ? "amanhã" : DIAS_NOME[d.getDay()];
+    const hh = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const faltam = d.getTime() - Date.now();
+    const h = Math.floor(faltam / 3600000), m = Math.floor((faltam % 3600000) / 60000);
+    const resta = h > 0 ? `em ${h}h${String(m).padStart(2, "0")}` : `em ${Math.max(1, m)} min`;
+    return `${nome} às ${hh} · ${resta}`;
+  }
+
+  function renderAgenda() {
+    const a = st.agenda;
+    if (!a) return;
+
+    $("ag-ativo").classList.toggle("on", a.ativo);
+    $("ag-ativo").setAttribute("aria-checked", String(a.ativo));
+    $("ag-estado").textContent = a.ativo ? "ligado" : "desligado";
+    $("ag-avisos").textContent = a.avisosMin.length
+      ? `${a.avisosMin.slice(0, -1).join(", ")}${a.avisosMin.length > 1 ? " e " : ""}${a.avisosMin.at(-1)} min`
+      : "sem aviso";
+
+    const p = $("ag-proximo");
+    if (!a.podeReiniciar) {
+      p.textContent = "Indisponível: o painel não controla o contêiner deste servidor.";
+      p.className = "ag-proximo off";
+    } else if (!a.ativo) {
+      p.textContent = "Desligado — nenhum reinício programado.";
+      p.className = "ag-proximo off";
+    } else if (a.proximoEm) {
+      p.textContent = `Próximo reinício: ${quandoFalta(a.proximoEm)}`;
+      p.className = "ag-proximo";
+    } else {
+      p.textContent = "Sem próxima ocorrência — confira os dias escolhidos.";
+      p.className = "ag-proximo off";
+    }
+    $("ag-pular").disabled = !a.ativo || !a.proximoEm;
+
+    if (agSujo) return; // não atropela quem está editando
+    $("ag-hora").value = a.hora;
+    $("ag-pular-gente").checked = a.pularSeTiverGente;
+    $("ag-dias").querySelectorAll(".ag-dia").forEach((b) => {
+      const on = a.dias.includes(Number(b.dataset.dia));
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    $("ag-salvar").disabled = true;
+  }
+
+  async function salvarAgenda(extra = {}) {
+    const corpo = { ...agFormulario(), ...extra };
+    try {
+      const nova = await put("/agenda", corpo);
+      agSujo = false;
+      st.agenda = nova;
+      renderAgenda();
+      toast(nova.ativo ? "reinício automático salvo" : "reinício automático desligado");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // o interruptor salva o que está na tela: liga/desliga sem deixar edição pendente pra trás
+  $("ag-ativo").onclick = () => salvarAgenda({ ativo: !st.agenda?.ativo });
+  $("ag-salvar").onclick = () => salvarAgenda({ ativo: !!st.agenda?.ativo });
+  $("ag-hora").oninput = agSujar;
+  $("ag-pular-gente").onchange = agSujar;
+  $("ag-dias").onclick = (e) => {
+    const b = e.target.closest(".ag-dia");
+    if (!b) return;
+    const on = b.classList.toggle("on");
+    b.setAttribute("aria-pressed", String(on));
+    agSujar();
+  };
+  $("ag-pular").onclick = async () => {
+    try {
+      st.agenda = await post("/agenda/pular");
+      renderAgenda();
+      toast("próximo reinício cancelado");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+
+  function renderCounts() {
+    const s = st.server;
+    const on = s.online ? `${s.count}/${s.max ?? "?"}` : "–";
+    ["pcount", "pcount2"].forEach((id) => { if ($(id)) $(id).textContent = on; });
+    $("nav-pcount").textContent = s.online ? s.count : "–";
+    $("tab-on").textContent = s.online ? s.count : "–";
+    $("nav-bcount").textContent = st.bans.length;
+    $("tab-bans").textContent = st.bans.length;
+    $("tab-wl").textContent = st.whitelist.length;
+  }
+
+  function renderPlayers() {
+    const rows = st.players.map((p) => `
+      <div class="prow">
+        ${avatar(p.nick)}
+        <div class="pinfo">
+          <div class="pname">${esc(p.nick)}</div>
+          <div class="ptime" title="tempo desde que o painel viu o jogador online">${elapsed(p.since)}</div>
+        </div>
+        <div class="prow-actions">
+          <button class="mini" data-act="tell" data-nick="${esc(p.nick)}">Msg</button>
+          <button class="mini kick" data-act="kick" data-nick="${esc(p.nick)}">Kick</button>
+          <button class="mini ban" data-act="ban" data-nick="${esc(p.nick)}">Ban</button>
+        </div>
+      </div>`).join("");
+
+    const livres = Math.max(0, (st.server.max || 0) - st.players.length);
+    const slots = Array.from({ length: livres }, () => `<div class="pslot"><div class="box"></div>vaga livre</div>`).join("");
+    $("painel-players").innerHTML = st.server.online
+      ? (rows + slots) || `<div class="empty">Ninguém online agora.</div>`
+      : `<div class="empty">Servidor fora do ar.</div>`;
+
+    $("table-players").innerHTML = st.players.length ? st.players.map((p) => `
+      <tr>
+        <td data-c="nick"><div class="tp-name">${avatar(p.nick)}<span class="pname">${esc(p.nick)}</span></div></td>
+        <td data-c="sessao" class="mono" style="color:var(--dim)">${elapsed(p.since)}</td>
+        <td data-c="acoes">
+          <div class="tacts">
+            <button class="mini" data-act="tell" data-nick="${esc(p.nick)}">Msg</button>
+            <button class="mini wl" data-act="whitelist" data-nick="${esc(p.nick)}">Whitelist</button>
+            <button class="mini kick" data-act="kick" data-nick="${esc(p.nick)}">Kick</button>
+            <button class="mini ban" data-act="ban" data-nick="${esc(p.nick)}">Ban</button>
+          </div>
+        </td>
+      </tr>`).join("")
+      : `<tr><td colspan="3"><div class="empty">${st.server.online ? "Ninguém online agora." : "Servidor fora do ar."}</div></td></tr>`;
+  }
+
+  function renderBans() {
+    $("bans-panel").innerHTML = st.bans.length ? st.bans.map((b) => `
+      <div class="listrow">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
+        <div class="txt">
+          <div class="pname">${esc(b.nick)}</div>
+          <div class="reason">${esc(b.reason)}${b.source ? ` · por ${esc(b.source)}` : ""}</div>
+        </div>
+        <div class="act"><button class="mini wl" data-pardon="${esc(b.nick)}">Perdoar</button></div>
+      </div>`).join("") : `<div class="empty">Ninguém banido. 👌</div>`;
+  }
+
+  function renderWL() {
+    $("wl-panel").innerHTML = st.whitelist.map((n) => `
+      <div class="listrow">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--grass)" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        <div class="txt pname">${esc(n)}</div>
+        <div class="act"><button class="mini ban" data-wlrm="${esc(n)}">Remover</button></div>
+      </div>`).join("") + `<div class="listrow add" id="wl-add">+ adicionar jogador</div>`;
+    $("wl-state").textContent = st.server.whitelistEnabled ? "ligada" : "desligada";
+    $("wl-toggle").classList.toggle("on", st.server.whitelistEnabled);
+    $("wl-toggle").setAttribute("aria-checked", String(st.server.whitelistEnabled));
+    $("wl-add").onclick = wlAdd;
+  }
+
+  /* ---------------- histórico ---------------- */
+
+  let hist = [];
+
+  async function loadHistory() {
+    try {
+      const data = await api("/history");
+      hist = data.players;
+      $("tab-hist").textContent = hist.length;
+      $("hist-since").textContent = data.since
+        ? `desde ${new Date(data.since).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`
+        : "";
+      renderHistory();
+    } catch (err) {
+      $("hist-list").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderHistory() {
+    if (!hist.length) { $("hist-list").innerHTML = `<div class="empty">Ninguém entrou ainda.</div>`; return; }
+    $("hist-list").innerHTML = hist.map((p) => {
+      const meta = [
+        p.sessions ? `${p.sessions} ${p.sessions === 1 ? "sessão" : "sessões"}` : null,
+        p.playedMs ? duracao(p.playedMs) : null,
+        p.firstSeen ? `desde ${new Date(p.firstSeen).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}` : null,
+      ].filter(Boolean).join(" · ") || "sem histórico no log retido";
+      const when = p.online
+        ? `<div class="hwhen on"><span class="lbl">agora</span>online</div>`
+        : `<div class="hwhen" title="${p.lastSeen ? esc(new Date(p.lastSeen).toLocaleString("pt-BR")) : ""}">
+             <span class="lbl">último logout</span>${esc(quando(p.lastSeen))}</div>`;
+      return `<div class="hrow${p.online ? " on" : ""}">
+        ${avatar(p.nick)}
+        <div class="hinfo">
+          <div class="pname">${esc(p.nick)}</div>
+          <div class="hmeta">${esc(meta)}</div>
+        </div>
+        ${when}
+      </div>`;
+    }).join("");
+  }
+
+  /* ---------------- mods ---------------- */
+
+  /**
+   * Fase 1: só leitura. A varredura abre dezenas de jars e fala com o Modrinth,
+   * então nada disso vive no polling de 2s — carrega quando a aba abre e só
+   * repete se pedirem. `modsCarregado` evita reler a cada ida e volta de aba.
+   */
+  let modsDados = null;
+  let modsCarregado = false;
+  let modsFiltro = "";
+  let modsAba = "ativos";
+  let aplicando = false;   // ciclo de aplicar+vigiar em curso
+  let aplicarTimer = null;
+
+  const CARREGADOR_NOME = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge" };
+
+  async function loadMods(forcar = false) {
+    if (modsCarregado && !forcar) return;
+    modsCarregado = true;
+    const btn = $("mods-recarregar");
+    btn.disabled = true;
+    if (forcar) $("mods-lista").innerHTML = `<div class="empty">Relendo a pasta…</div>`;
+    try {
+      modsDados = await api("/mods");
+      renderMods();
+      // aplicação iniciada em outra aba (ou antes de recarregar a página) continua
+      // sendo acompanhada aqui: o estado mora no servidor, não neste navegador
+      if (!aplicando) seguirAplicacao();
+    } catch (err) {
+      modsCarregado = false;
+      modsDados = null;
+      $("mods-sub").textContent = "não deu para ler a pasta";
+      $("mods-resumo").style.display = "none";
+      $("mods-lista").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderMods() {
+    const d = modsDados;
+    if (!d) return;
+
+    $("nav-mcount").textContent = d.temPasta ? d.total : "";
+
+    if (!d.temPasta) {
+      $("mods-sub").textContent = "este servidor não tem pasta de mods";
+      $("mods-resumo").style.display = "none";
+      $("mods-aviso").style.display = "none";
+      $("mods-lista").innerHTML = `<div class="empty">Nenhuma pasta <span class="mono">mods/</span> no volume deste servidor.<br>
+        Servidor vanilla ou de plugins não usa esta aba.</div>`;
+      return;
+    }
+
+    const carregador = CARREGADOR_NOME[d.carregador] || "carregador não identificado";
+    $("mods-sub").textContent = `${carregador}${d.versaoJogo ? " · " + d.versaoJogo : ""} · lidos da pasta mods/`;
+
+    // o painel funciona inteiro sem internet; só o enriquecimento fica de fora
+    const aviso = $("mods-aviso");
+    if (!d.online.ligado) {
+      aviso.style.display = "";
+      aviso.className = "banner";
+      aviso.innerHTML = `A consulta ao Modrinth está desligada (<span class="mono">MODS_ONLINE=false</span>).
+        A lista sai do próprio jar — sem nome de catálogo nem aviso de atualização.`;
+    } else if (!d.online.ok) {
+      aviso.style.display = "";
+      aviso.className = "banner off";
+      aviso.innerHTML = `Sem resposta do Modrinth: ${esc(d.online.erro || "erro desconhecido")}.
+        A lista abaixo é o que os próprios jars declaram.`;
+    } else {
+      aviso.style.display = "none";
+    }
+
+    const ativos = d.mods.filter((m) => m.ativo);
+    const comUpdate = ativos.filter((m) => m.atualizacao).length;
+    const soCliente = ativos.filter((m) => m.modrinth?.clienteSo).length;
+    $("mods-resumo").style.display = "";
+    $("mods-total").textContent = d.total;
+    $("mods-bytes").textContent = bytes(d.bytes);
+    $("mods-novos").textContent = d.online.ok ? comUpdate : "–";
+    $("mods-cliente").textContent = d.online.ok ? soCliente : "–";
+    $("mods-novos").parentElement.classList.toggle("alerta", comUpdate > 0);
+    $("mods-cliente").parentElement.classList.toggle("alerta", soCliente > 0);
+    $("mods-n-ativos").textContent = d.total;
+    $("mods-n-off").textContent = d.desativados;
+
+    // mudança em mod não vale a quente: o aviso fica até o servidor subir de novo
+    const pend = $("mods-pendente");
+    if (d.pendente && !aplicando) {
+      pend.style.display = "";
+      const n = d.pendente.total;
+      $("mods-pendente-txt").innerHTML = `${n} ${n === 1 ? "mudança espera" : "mudanças esperam"} reinício.
+        Nenhum carregador troca mod com o servidor no ar — até reiniciar, o que está rodando é o de antes.`;
+    } else {
+      pend.style.display = "none";
+    }
+
+    // atalho para o caso mais comum: vários mods desatualizados de uma vez
+    const nov = $("mods-novos-banner");
+    if (comUpdate && !aplicando) {
+      nov.style.display = "";
+      $("mods-novos-txt").innerHTML = comUpdate === 1
+        ? `1 mod tem versão mais nova compatível com ${esc(d.versaoJogo || "esta versão")}.`
+        : `${comUpdate} mods têm versão mais nova compatível com ${esc(d.versaoJogo || "esta versão")}.`;
+    } else {
+      nov.style.display = "none";
+    }
+
+    const termo = modsFiltro.trim().toLowerCase();
+    const daAba = d.mods.filter((m) => (modsAba === "off" ? !m.ativo : m.ativo));
+    const lista = termo
+      ? daAba.filter((m) => `${m.nome} ${m.arquivo} ${m.id || ""}`.toLowerCase().includes(termo))
+      : daAba;
+
+    if (!lista.length) {
+      const vazio = modsAba === "off"
+        ? "Nenhum mod desativado.<br>Desativar tira o jar da pasta que o servidor lê, sem apagar nada."
+        : "A pasta está vazia.";
+      $("mods-lista").innerHTML = `<div class="empty">${termo ? "Nenhum mod com esse nome." : vazio}</div>`;
+      return;
+    }
+
+    // id -> nome de catálogo, para "depende de 1" virar "depende de Cloth Config API".
+    // Ordenado do id mais longo para o mais curto porque o casamento por raiz abaixo
+    // precisa preferir a correspondência mais específica.
+    const nomePorId = new Map(
+      d.mods.filter((x) => x.id).map((x) => [x.id, x.nome]).sort((a, b) => b[0].length - a[0].length));
+
+    /**
+     * O id declarado nem sempre é o id do jar instalado: `balm-fabric` é o Balm,
+     * `cloth-config2` é o Cloth Config, `c2me-base` é o C2ME. Tenta o id exato e
+     * depois a raiz seguida de separador ou número. Id que não bate com nada fica
+     * cru de propósito — é o caso de dependência faltando, e ver o id ajuda mais
+     * do que esconder.
+     */
+    function nomeDaDep(id) {
+      if (nomePorId.has(id)) return nomePorId.get(id);
+      for (const [k, nome] of nomePorId) {
+        if (id.length > k.length && id.startsWith(k) && /^[-_0-9]/.test(id[k.length])) return nome;
+      }
+      return id;
+    }
+
+    $("mods-lista").innerHTML = lista.map((m) => {
+      const inicial = esc((m.nome || m.arquivo).trim()[0] || "?").toUpperCase();
+
+      const deps = [...new Set(m.dependeDeVerdade.map(nomeDaDep))];
+      const dep = deps.length === 1 ? `depende de ${deps[0]}`
+        : deps.length ? `depende de ${deps.length} mods`
+        : null;
+
+      const meta = [versaoCurta(m.versao) || "versão desconhecida", bytes(m.bytes), dep]
+        .filter(Boolean).join(" · ");
+
+      // o title termina a frase: versão inteira e a lista de dependências por nome
+      const detalhe = [
+        m.versao && m.versao !== versaoCurta(m.versao) ? `versão ${m.versao}` : null,
+        deps.length > 1 ? `depende de: ${deps.join(", ")}` : null,
+      ].filter(Boolean).join("\n");
+
+      const tags = [];
+      if (m.atualizacao) {
+        tags.push(`<span class="mtag up" title="versão ${esc(m.atualizacao.versao)}${m.atualizacao.em ? `, publicada em ${esc(m.atualizacao.em.slice(0, 10))}` : ""}">→ ${esc(versaoCurta(m.atualizacao.versao))}</span>`);
+      }
+      // jar que não declara o carregador deste servidor não é carregado: peso morto
+      if (m.carregador && d.carregador && m.carregador !== d.carregador) {
+        tags.push(`<span class="mtag err" title="este jar declara ${esc(CARREGADOR_NOME[m.carregador] || m.carregador)} e o servidor é ${esc(carregador)} — ele não é carregado">não é ${esc(carregador)}</span>`);
+      }
+      if (m.modrinth?.clienteSo) tags.push(`<span class="mtag cli" title="o Modrinth marca este mod como não suportado no servidor">só cliente</span>`);
+      if (!m.carregador) tags.push(`<span class="mtag err" title="não achei fabric.mod.json nem mods.toml dentro do jar">não identificado</span>`);
+
+      if (!m.ativo) tags.push(`<span class="mtag desl">desativado</span>`);
+
+      const link = m.modrinth
+        ? `<a class="mlink" href="${esc(m.modrinth.url)}" target="_blank" rel="noopener noreferrer"
+             title="abrir no Modrinth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>`
+        : `<span class="mlink"></span>`;
+
+      const acoes = (m.atualizacao ? `<button class="mini wl" data-mod-up="${esc(m.arquivo)}">Atualizar</button>` : "")
+        + (m.ativo
+          ? `<button class="mini" data-mod-off="${esc(m.arquivo)}">Desativar</button>`
+          : `<button class="mini wl" data-mod-on="${esc(m.arquivo)}">Ativar</button>`);
+
+      return `<div class="mrow${m.ativo ? "" : " off"}${m.atualizacao ? " novo" : ""}${m.carregador ? "" : " orfao"}">
+        <div class="mcube">${inicial}</div>
+        <div class="minfo">
+          <div class="mnome" title="${esc(m.arquivo)}">${esc(m.nome)}</div>
+          <div class="mmeta"${detalhe ? ` title="${esc(detalhe)}"` : ""}>${esc(meta)}</div>
+        </div>
+        <div class="mtags">${tags.join("")}</div>
+        <div class="macts">
+          ${acoes}
+          <button class="mini ban" data-mod-rm="${esc(m.arquivo)}">Remover</button>
+        </div>
+        ${link}
+      </div>`;
+    }).join("");
+  }
+
+  /* ---------------- mods: ações (fase 2) ---------------- */
+
+  const acharMod = (arquivo) => (modsDados?.mods || []).find((m) => m.arquivo === arquivo);
+
+  /** Frase pronta sobre quem depende deste mod — o aviso que evita o tiro no pé. */
+  function quemQuebra(m) {
+    const n = m.usadoPor?.length || 0;
+    if (!n) return "";
+    const nomes = m.usadoPor.slice(0, 4).join(", ");
+    const resto = n > 4 ? ` e mais ${n - 4}` : "";
+    return `${n} ${n === 1 ? "mod ativo depende" : "mods ativos dependem"} dele: ${nomes}${resto}. `
+      + `${n === 1 ? "Ele não vai carregar" : "Eles não vão carregar"} no próximo boot.`;
+  }
+
+  const modAcao = (fn, msg) => act(fn, msg, () => loadMods(true));
+
+  async function desativarMod(arquivo) {
+    const m = acharMod(arquivo);
+    const aviso = m ? quemQuebra(m) : "";
+    // sem dependente é reversível e barato: não vale um modal. Com dependente, vale.
+    if (aviso && !await confirmarCom("DESATIVAR", {
+      title: `Desativar ${m.nome}`,
+      text: `${aviso} O jar vai para a pasta mods-off e nada é apagado — dá para ativar de volta a qualquer momento.`,
+      confirm: "Desativar",
+    })) return;
+    await modAcao(() => post("/mods/estado", { arquivo, ativo: false }), `${m?.nome || arquivo} desativado`);
+  }
+
+  async function ativarMod(arquivo) {
+    const m = acharMod(arquivo);
+    await modAcao(() => post("/mods/estado", { arquivo, ativo: true }), `${m?.nome || arquivo} ativado`);
+  }
+
+  async function removerMod(arquivo) {
+    const m = acharMod(arquivo);
+    const aviso = m && m.ativo ? quemQuebra(m) : "";
+    if (!await confirmarCom("REMOVER", {
+      title: `Remover ${m?.nome || arquivo}`,
+      text: `${aviso}O arquivo é apagado do disco e não tem como desfazer pelo painel. `
+        + `Se a ideia é só tirar do ar, use Desativar.`,
+      confirm: "Remover",
+    })) return;
+    await modAcao(() => post("/mods/remover", { arquivo }), `${m?.nome || arquivo} removido do disco`);
+  }
+
+  async function atualizarMod(arquivo, botao) {
+    const m = acharMod(arquivo);
+    if (botao) { botao.disabled = true; botao.textContent = "baixando…"; }
+    try {
+      const r = await post("/mods/atualizar", { arquivo });
+      toast(`${r.nome}: ${r.versaoAntiga || "?"} → ${r.versaoNova}`);
+      await loadMods(true);
+    } catch (err) {
+      toast(err.message, true);
+      if (botao) { botao.disabled = false; botao.textContent = "Atualizar"; }
+    }
+  }
+
+  $("mods-atualizar-todos").onclick = async () => {
+    const n = (modsDados?.mods || []).filter((m) => m.atualizacao).length;
+    if (!await confirmarCom("ATUALIZAR", {
+      title: "Atualizar todos os mods",
+      text: `${n} ${n === 1 ? "mod vai ser baixado" : "mods vão ser baixados"} na versão mais nova compatível. `
+        + `${n === 1 ? "O jar antigo fica" : "Os jars antigos ficam"} guardados até o servidor subir bem — se ele não subir, tudo volta sozinho.`,
+      confirm: "Atualizar",
+    })) return;
+
+    const btn = $("mods-atualizar-todos");
+    btn.disabled = true; btn.textContent = "baixando…";
+    try {
+      const r = await post("/mods/atualizar-todos");
+      if (r.falhos.length) {
+        toast(`${r.feitos.length} de ${r.total} atualizados; ${r.falhos.length} falharam`, true,
+          r.falhos.map((f) => f.arquivo).join(", "));
+      } else {
+        toast(`${r.feitos.length} ${r.feitos.length === 1 ? "mod atualizado" : "mods atualizados"}`);
+      }
+      await loadMods(true);
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      btn.disabled = false; btn.textContent = "Atualizar todos";
+    }
+  };
+
+  $("mods-lista").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mod-off],[data-mod-on],[data-mod-rm],[data-mod-up]");
+    if (!b) return;
+    if (b.dataset.modOff) desativarMod(b.dataset.modOff);
+    else if (b.dataset.modOn) ativarMod(b.dataset.modOn);
+    else if (b.dataset.modRm) removerMod(b.dataset.modRm);
+    else if (b.dataset.modUp) atualizarMod(b.dataset.modUp, b);
+  });
+
+  /* ---------------- aplicar com rede de segurança (fase 4) ---------------- */
+
+  // nome próprio: o restore do mundo já tem um FASES logo abaixo, e duas const
+  // com o mesmo nome no mesmo escopo derrubam o script inteiro
+  const FASES_MODS = {
+    avisando: "avisando quem está jogando…",
+    reiniciando: "reiniciando o servidor…",
+    esperando: "esperando o servidor voltar…",
+    revertendo: "não subiu — devolvendo os mods de antes…",
+    pronto: "pronto",
+    revertido: "revertido",
+    "revertido-sem-confirmar": "revertido, mas o servidor ainda não confirmou",
+    erro: "deu erro no caminho",
+  };
+
+  function mostrarAplicando(s) {
+    const el = $("mods-aplicando");
+    if (!s || (!s.rodando && !s.fase)) { el.style.display = "none"; return; }
+    el.style.display = "";
+    el.className = "banner mods-pend" + (s.ok === false ? " off" : "");
+    const titulo = FASES_MODS[s.fase] || s.fase || "";
+    $("mods-aplicando-txt").innerHTML = s.rodando
+      ? `<b>Aplicando mudanças de mod.</b> ${esc(titulo)}<br>
+         <span class="mono" style="font-size:11.5px">${esc(s.detalhe || "")}</span>`
+      : s.ok
+        ? `<b>Mods aplicados.</b> ${esc(s.detalhe || "")}`
+        : `<b>O servidor não subiu com as mudanças.</b> ${esc(s.erro || "")}<br>
+           ${esc(s.detalhe || "")}`;
+  }
+
+  /**
+   * Acompanha o ciclo até ele acabar. A releitura da pasta só acontece na
+   * transição rodando→parado: `loadMods` chama esta função, então recarregar
+   * sempre que o status chega parado daria um laço entre as duas.
+   */
+  async function seguirAplicacao() {
+    clearTimeout(aplicarTimer);
+    try {
+      const s = await api("/mods/aplicar/status");
+      const estavaRodando = aplicando;
+      aplicando = s.rodando;
+      mostrarAplicando(s.rodando || estavaRodando ? s : null);
+
+      if (s.rodando) {
+        aplicarTimer = setTimeout(seguirAplicacao, 2500);
+        return;
+      }
+      if (!estavaRodando) return; // nada em curso; só confirmando
+
+      // acabou agora: a pasta pode ter sido revertida por baixo
+      await loadMods(true);
+      if (s.ok) toast("mods aplicados e servidor no ar");
+      else if (s.revertido) toast("não subiu: os mods de antes foram restaurados", true);
+      setTimeout(() => { if (!aplicando) { mostrarAplicando(null); renderMods(); } }, 20000);
+    } catch {
+      if (aplicando) aplicarTimer = setTimeout(seguirAplicacao, 5000);
+    }
+  }
+
+  $("mods-aplicar").onclick = async () => {
+    const n = modsDados?.pendente?.total || 0;
+    const quem = st?.players?.map((p) => p.nick) || [];
+    const aviso = quem.length
+      ? `${quem.join(", ")} ${quem.length === 1 ? "está jogando e vai cair" : "estão jogando e vão cair"}. `
+      : "Ninguém está jogando agora. ";
+    if (!await confirmarCom("APLICAR", {
+      title: "Aplicar e reiniciar",
+      text: `${aviso}O painel reinicia, espera o servidor voltar e confere. `
+        + `Se ele não subir, ${n === 1 ? "a mudança é desfeita sozinha" : "as mudanças são desfeitas sozinhas"} e o servidor volta como estava.`,
+      confirm: "Aplicar",
+    })) return;
+
+    try {
+      aplicando = true;
+      // é o renderMods que decide quais banners aparecem (a regra `!aplicando`);
+      // escondê-los na mão aqui era o mesmo estado decidido em dois lugares
+      renderMods();
+      mostrarAplicando(await post("/mods/aplicar"));
+      seguirAplicacao();
+    } catch (err) {
+      aplicando = false;
+      toast(err.message, true);
+      renderMods();
+    }
+  };
+
+  $("mods-abas").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-mods]");
+    if (!t) return;
+    modsAba = t.dataset.mods;
+    $("mods-abas").querySelectorAll(".subtab").forEach((s) => s.classList.toggle("active", s === t));
+    renderMods();
+  });
+
+  $("mods-busca").addEventListener("input", (e) => { modsFiltro = e.target.value; renderMods(); });
+  $("mods-recarregar").onclick = () => loadMods(true);
+
+  /* ---------------- mods: adicionar (fase 3) ---------------- */
+
+  let addBusca = null;   // debounce da digitação
+  let addUltimo = null;  // arquivo recusado, guardado para o "enviar mesmo assim"
+
+  function abrirAdd() {
+    $("addmod").classList.add("open");
+    addAba("buscar");
+    const d = modsDados;
+    $("addmod-escopo").textContent = d
+      ? `Mostrando só o que serve ${CARREGADOR_NOME[d.carregador] || "este carregador"}${d.versaoJogo ? " " + d.versaoJogo : ""}.`
+      : "";
+    $("addmod-q").value = "";
+    $("addmod-res").innerHTML = "";
+    buscarNoCatalogo("");
+    setTimeout(() => $("addmod-q").focus(), 60);
+  }
+
+  function fecharAdd() {
+    $("addmod").classList.remove("open");
+    limparEnvio();
+  }
+
+  function addAba(qual) {
+    $("addmod-abas").querySelectorAll(".subtab").forEach((s) => s.classList.toggle("active", s.dataset.add === qual));
+    $("addmod-pane-buscar").style.display = qual === "buscar" ? "" : "none";
+    $("addmod-pane-enviar").style.display = qual === "enviar" ? "" : "none";
+  }
+
+  async function buscarNoCatalogo(termo) {
+    const alvo = $("addmod-res");
+    alvo.innerHTML = `<div class="empty" style="padding:20px">Procurando…</div>`;
+    try {
+      const { resultados } = await api(`/mods/buscar?q=${encodeURIComponent(termo)}`);
+      if (!resultados.length) {
+        alvo.innerHTML = `<div class="empty" style="padding:20px">Nada que sirva este servidor.</div>`;
+        return;
+      }
+      const jaTem = new Set((modsDados?.mods || []).map((m) => m.modrinth?.slug).filter(Boolean));
+      alvo.innerHTML = resultados.map((r) => {
+        const tem = jaTem.has(r.slug);
+        const icone = r.icone
+          ? `<img src="${esc(r.icone)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`
+          : `<div class="semicone">${esc(r.titulo[0] || "?").toUpperCase()}</div>`;
+        return `<div class="mrrow">
+          ${icone}
+          <div class="mrinfo">
+            <div class="mrnome">${esc(r.titulo)}${r.clienteSo ? ` <span class="mtag cli">só cliente</span>` : ""}</div>
+            <div class="mrdesc">${esc(r.descricao || "")}</div>
+            <div class="mrdown">${(r.downloads || 0).toLocaleString("pt-BR")} downloads · ${esc(r.autor || "")}</div>
+          </div>
+          ${tem
+            ? `<span class="mtag desl">instalado</span>`
+            : `<button class="mini wl" data-instalar="${esc(r.id)}" data-titulo="${esc(r.titulo)}">Instalar</button>`}
+        </div>`;
+      }).join("");
+    } catch (err) {
+      alvo.innerHTML = `<div class="empty" style="padding:20px">${esc(err.message)}</div>`;
+    }
+  }
+
+  $("addmod-q").addEventListener("input", (e) => {
+    clearTimeout(addBusca);
+    const v = e.target.value;
+    addBusca = setTimeout(() => buscarNoCatalogo(v), 320);
+  });
+
+  $("addmod-res").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-instalar]");
+    if (!b) return;
+    const projeto = b.dataset.instalar;
+    const titulo = b.dataset.titulo;
+
+    // dependência que falta é a causa mais comum de mod que "não funciona"
+    let faltando = [];
+    try { ({ faltando } = await api(`/mods/dependencias?projeto=${encodeURIComponent(projeto)}`)); } catch { /* segue */ }
+    if (faltando.length) {
+      const um = faltando.length === 1;
+      // vírgula entre todos e "e" antes do último: "A, B e C"
+      const nomes = faltando.map((f) => f.titulo);
+      const lista = um ? nomes[0] : nomes.slice(0, -1).join(", ") + " e " + nomes[nomes.length - 1];
+      if (!await confirmarCom("SIM", {
+        title: `Instalar ${titulo}`,
+        text: `Este mod precisa de ${lista}, que ${um ? "não está instalado" : "não estão instalados"}. `
+          + `Sem ${um ? "ele" : "eles"} o servidor pode não subir. `
+          + `Instale ${um ? "a dependência" : "as dependências"} primeiro, ou siga e resolva depois.`,
+        confirm: "Instalar",
+      })) return;
+    }
+
+    b.disabled = true;
+    b.textContent = "baixando…";
+    try {
+      const r = await post("/mods/instalar", { projeto });
+      toast(`${r.nome} ${r.versaoModrinth || ""} instalado — vale no próximo reinício`.trim());
+      await loadMods(true);
+      buscarNoCatalogo($("addmod-q").value);
+    } catch (err) {
+      toast(err.message, true);
+      b.disabled = false;
+      b.textContent = "Instalar";
+    }
+  });
+
+  /* ---- envio manual ---- */
+
+  function limparEnvio() {
+    addUltimo = null;
+    $("addmod-progresso").style.display = "none";
+    $("addmod-recusa").style.display = "none";
+    $("addmod-forcar-wrap").style.display = "none";
+    $("addmod-barra").style.width = "0%";
+    $("addmod-file").value = "";
+  }
+
+  /** O corpo é o .jar cru — o nome vai na query. */
+  const enviarJar = (arquivo, forcar) =>
+    uploadArquivo(`${API}/mods/arquivo?nome=${encodeURIComponent(arquivo.name)}${forcar ? "&forcar=1" : ""}`,
+      arquivo, "application/java-archive", (feito, total) => {
+        const pct = Math.round((feito / total) * 100);
+        $("addmod-barra").style.width = pct + "%";
+        $("addmod-status").textContent = `enviando… ${pct}%`;
+      });
+
+  async function mandarArquivo(arquivo, forcar = false) {
+    $("addmod-recusa").style.display = "none";
+    $("addmod-forcar-wrap").style.display = "none";
+    $("addmod-progresso").style.display = "";
+    $("addmod-status").textContent = "enviando…";
+    $("addmod-escolher").disabled = true;
+    try {
+      const r = await enviarJar(arquivo, forcar);
+      $("addmod-status").textContent = "pronto";
+      const onde = r.ativo ? "instalado" : "guardado desativado";
+      toast(`${r.nome} ${onde} — vale no próximo reinício`);
+      await loadMods(true);
+      fecharAdd(); // já limpa o estado do envio por dentro
+    } catch (err) {
+      $("addmod-progresso").style.display = "none";
+      // 422 é a recusa por incompatibilidade: explica e oferece a saída
+      if (err.status === 422 && err.veredito) {
+        addUltimo = arquivo;
+        $("addmod-recusa").style.display = "";
+        $("addmod-recusa").innerHTML = `<b>Este mod não serve neste servidor.</b><br>`
+          + err.veredito.motivos.map((m) => "• " + esc(m)).join("<br>")
+          + `<br><span class="hint" style="color:inherit;opacity:.85">Se ele entrar assim, o servidor ignora ou nem sobe.</span>`;
+        $("addmod-forcar-wrap").style.display = "";
+      } else {
+        toast(err.message, true);
+      }
+    } finally {
+      $("addmod-escolher").disabled = false;
+    }
+  }
+
+  $("mods-add").onclick = abrirAdd;
+  $("addmod-x").onclick = fecharAdd;
+  $("addmod-fechar").onclick = fecharAdd;
+  $("addmod").onclick = (e) => { if (e.target === $("addmod")) fecharAdd(); };
+  $("addmod-abas").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-add]");
+    if (t) addAba(t.dataset.add);
+  });
+  $("addmod-escolher").onclick = () => $("addmod-file").click();
+  $("addmod-file").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (f) mandarArquivo(f, false);
+  });
+  $("addmod-forcar").onclick = () => { if (addUltimo) mandarArquivo(addUltimo, true); };
+
+  /* ---------------- backup do mundo ---------------- */
+
+  async function loadBackupInfo() {
+    try {
+      const info = await api("/backup/info");
+      $("bk-size").innerHTML = `${esc(bytes(info.sizeBytes))}<span> em disco</span>`;
+    } catch { /* mostra o traço mesmo */ }
+  }
+
+  $("bk-btn").onclick = async () => {
+    const btn = $("bk-btn");
+    btn.disabled = true;
+    try {
+      const { ticket } = await post("/backup/ticket");
+      // navegação normal: o Content-Disposition faz o navegador baixar sem sair da página
+      location.href = `${API}/backup/world?ticket=${encodeURIComponent(ticket)}`;
+      toast("backup começou — o arquivo aparece nos downloads em alguns minutos");
+    } catch (err) {
+      toast(err.message, true);
+    }
+    // o pedido segue vivo no navegador; libera o botão só depois pra não disparar dois
+    setTimeout(() => { btn.disabled = false; }, 10000);
+  };
+
+  /* ---------------- chat ---------------- */
+
+  /**
+   * O chat não tem canal próprio: o backend já marca com `.chat` as linhas do log
+   * que são conversa, e elas chegam no mesmo polling do console. Aqui a aba junta
+   * o histórico do dia (lido do log) com o que foi chegando desde então.
+   */
+  let chatHist = [];
+  let chatVivo = [];
+  let chatBase = -1;      // seq do console no instante em que o histórico foi lido
+  let chatSistema = true; // mostrar entradas/saídas
+
+  function coletarChat(lines) {
+    // linha ao vivo é sempre de hoje; carimba pra divisória de dia não se perder
+    const hoje = new Date().toLocaleDateString("sv-SE"); // sv-SE dá AAAA-MM-DD
+    for (const l of lines) if (l.chat) chatVivo.push({ seq: l.seq, t: l.t, dia: hoje, ...l.chat });
+    if (chatVivo.length > 400) chatVivo.splice(0, chatVivo.length - 400);
+  }
+
+  async function loadChat() {
+    try {
+      const data = await api("/chat/history");
+      chatHist = data.lines;
+      chatBase = lastSeq;
+      chatVivo = chatVivo.filter((c) => c.seq > chatBase);
+      renderChat();
+    } catch (err) {
+      $("chatlist").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  const chatIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4-4 4M12 16h8"/></svg>`;
+
+  function renderChat() {
+    const el = $("chatlist");
+    const colado = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    const todas = [...chatHist, ...chatVivo.filter((c) => c.seq > chatBase)]
+      .filter((c) => chatSistema || c.kind !== "system");
+
+    if (!todas.length) {
+      el.innerHTML = `<div class="empty">Nenhuma conversa hoje ainda.</div>`;
+      return;
+    }
+
+    let diaAtual = null;
+    el.innerHTML = todas.map((c) => {
+      // o log só carimba a hora: sem a divisória, ontem e hoje se misturariam
+      let divisoria = "";
+      if (c.dia && c.dia !== diaAtual) {
+        diaAtual = c.dia;
+        const [a, m, d] = c.dia.split("-");
+        const rotulo = quandoDia(new Date(Number(a), Number(m) - 1, Number(d)));
+        divisoria = `<div class="csys">${esc(rotulo)}</div>`;
+      }
+      if (c.kind === "system") {
+        return `${divisoria}<div class="csys">${esc(c.nick)} ${esc(c.text)} · ${esc(c.t || "")}</div>`;
+      }
+      const cabeca = c.kind === "server"
+        ? `<div class="server-av">${chatIcon}</div>`
+        : avatar(c.nick);
+      const nome = c.kind === "server" ? "Servidor" : c.nick;
+      const responder = c.kind === "server" ? ""
+        : `<button class="mini creply" data-act="tell" data-nick="${esc(c.nick)}">No pé do ouvido</button>`;
+      return `${divisoria}<div class="cmsg ${esc(c.kind)}">
+        ${cabeca}
+        <div class="cbody">
+          <div class="chead"><span class="cnick">${esc(nome)}</span><span class="ctime">${esc(c.t || "")}</span>${responder}</div>
+          <div class="ctext">${esc(c.text)}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    if (colado) el.scrollTop = el.scrollHeight;
+  }
+
+  $("chat-sys").onclick = () => {
+    chatSistema = !chatSistema;
+    $("chat-sys").textContent = chatSistema ? "ocultar entradas e saídas" : "mostrar entradas e saídas";
+    renderChat();
+  };
+
+  async function enviarChat() {
+    const inp = $("chat-input");
+    const msg = inp.value.trim();
+    if (!msg) return;
+    if (!st || !st.server.online) { toast("servidor fora do ar", true); return; }
+    inp.value = "";
+    // vai como `say`: aparece no jogo como [Server] e volta pelo log, sem eco falso aqui
+    try { await post("/chat/broadcast", { message: msg }); await tick(); }
+    catch (err) { toast(err.message, true); inp.value = msg; }
+  }
+  $("chat-send").onclick = enviarChat;
+  $("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); enviarChat(); } });
+
+  /* ---------------- restaurar o mundo ---------------- */
+
+  const FASES = {
+    recebendo: "enviando o pacote para o servidor…",
+    conferindo: "conferindo o conteúdo do pacote…",
+    extraindo: "descompactando o mundo…",
+    parando: "desligando o servidor…",
+    trocando: "guardando o mundo atual e pondo o novo no lugar…",
+    subindo: "ligando o servidor de volta…",
+    limpando: "limpando os arquivos temporários…",
+    pronto: "pronto",
+  };
+
+  let restaurando = false;
+
+  async function loadGuardados() {
+    try {
+      const { mundos } = await api("/restore/preserved");
+      $("rs-guardados").innerHTML = !mundos.length ? "" : `
+        <div class="card-title" style="margin-bottom:9px">Mundos guardados <span class="n">${mundos.length}</span></div>
+        <div class="listgrid">${mundos.map((m) => `
+          <div class="listrow">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+            <div class="txt">
+              <div class="pname mono">${esc(m.nome)}</div>
+              <div class="reason">${esc(m.bytes ? bytes(m.bytes) : "—")} · guardado ${esc(quando(m.em ? new Date(m.em).getTime() : null))}</div>
+            </div>
+            <div class="act"><button class="mini ban" data-rsdel="${esc(m.nome)}">Apagar</button></div>
+          </div>`).join("")}</div>
+        <div class="hint">Cada um destes ocupa o tamanho de um mundo inteiro. Apague quando tiver certeza de que não precisa mais.</div>`;
+    } catch { /* aba abre mesmo assim */ }
+  }
+
+  function mostrarFase(fase, detalhe) {
+    $("rs-fase").textContent = detalhe || FASES[fase] || fase || "…";
+  }
+
+  /** Enquanto o PUT roda, pergunta ao backend em que passo ele está. */
+  async function seguirFases() {
+    while (restaurando) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!restaurando) break;
+      try {
+        const s = await api("/restore/status");
+        if (s.fase && s.fase !== "recebendo") {
+          $("rs-bar").style.width = "100%";
+          mostrarFase(s.fase, s.detalhe);
+        }
+      } catch { /* servidor reiniciando, tenta de novo */ }
+    }
+  }
+
+  async function apagarGuardado(nome) {
+    const resp = await ask({
+      title: "Apagar mundo guardado",
+      label: "digite APAGAR para confirmar",
+      text: `${nome} some pra sempre. Se ele for a única cópia de um mundo, não tem volta.`,
+      placeholder: "APAGAR",
+      confirm: "Apagar",
+    });
+    if (resp !== "APAGAR") { if (resp !== null) toast("cancelado: era preciso digitar APAGAR", true); return; }
+    try { await del(`/restore/preserved/${encodeURIComponent(nome)}`); toast(`${nome} apagado`); }
+    catch (err) { toast(err.message, true); }
+    loadGuardados();
+    loadBackupInfo();
+  }
+
+  $("rs-pick").onclick = () => $("rs-file").click();
+
+  $("rs-file").onchange = async () => {
+    const arquivo = $("rs-file").files[0];
+    $("rs-file").value = "";
+    if (!arquivo) return;
+
+    const quem = st.players.map((p) => p.nick);
+    const resp = await ask({
+      title: "Restaurar o mundo",
+      label: "digite RESTAURAR para confirmar",
+      text: `Vai entrar o mundo de "${arquivo.name}" (${bytes(arquivo.size)}). `
+        + `${quem.length ? `${quem.join(", ")} está jogando e vai cair. ` : "Ninguém está jogando agora. "}`
+        + "O mundo de agora não é apagado — fica guardado ao lado.",
+      placeholder: "RESTAURAR",
+      confirm: "Restaurar",
+    });
+    if (resp !== "RESTAURAR") { if (resp !== null) toast("cancelado: era preciso digitar RESTAURAR", true); return; }
+
+    restaurando = true;
+    powerOcupado = true;
+    renderPower();
+    $("rs-andamento").style.display = "";
+    $("rs-bar").style.width = "0%";
+    $("rs-bar").className = "";
+    mostrarFase("recebendo");
+    seguirFases();
+
+    try {
+      await enviarRestore(arquivo);
+      toast("mundo restaurado — o servidor está voltando");
+      mostrarFase("pronto", "pronto: o mundo anterior ficou guardado ao lado");
+    } catch (err) {
+      $("rs-bar").className = "bad";
+      mostrarFase(null, `falhou: ${err.message}`);
+      toast(err.message, true);
+    } finally {
+      restaurando = false;
+      powerOcupado = false;
+      await tick();
+      renderPower();
+      loadGuardados();
+    }
+  };
+
+  const enviarRestore = (arquivo) =>
+    uploadArquivo(`${API}/restore/world`, arquivo, "application/gzip", (feito, total) => {
+      $("rs-bar").style.width = `${Math.round((feito / total) * 100)}%`;
+      mostrarFase(null, `enviando… ${bytes(feito)} de ${bytes(total)}`);
+    });
+
+  /* ---------------- energia do servidor ---------------- */
+
+  const ACOES = {
+    restart: { titulo: "Reiniciar o servidor", palavra: "REINICIAR", ok: "reiniciando…" },
+    stop: { titulo: "Parar o servidor", palavra: "PARAR", ok: "parando…" },
+    start: { titulo: "Iniciar o servidor", palavra: null, ok: "iniciando…" },
+  };
+
+  async function power(acao) {
+    const cfg = ACOES[acao];
+    if (cfg.palavra) {
+      const quem = st.players.map((p) => p.nick);
+      const aviso = quem.length
+        ? `${quem.join(", ")} ${quem.length === 1 ? "está" : "estão"} jogando agora e ${quem.length === 1 ? "vai" : "vão"} cair.`
+        : "Ninguém está jogando agora.";
+      const resp = await ask({
+        title: cfg.titulo,
+        label: `digite ${cfg.palavra} para confirmar`,
+        text: `${aviso} O mundo é salvo antes, e o contêiner tem 90s pra sair sozinho.`,
+        placeholder: cfg.palavra,
+        confirm: cfg.titulo.split(" ")[0],
+      });
+      if (resp !== cfg.palavra) { if (resp !== null) toast(`cancelado: era preciso digitar ${cfg.palavra}`, true); return; }
+    }
+    powerOcupado = true;
+    renderPower();
+    toast(cfg.ok);
+    try {
+      await post(`/power/${acao}`);
+      toast(acao === "stop" ? "servidor parado" : "servidor no ar de novo");
+    } catch (err) {
+      toast(err.message, true);
+    }
+    powerOcupado = false;
+    await tick();
+    renderPower();
+  }
+  $("pw-restart").onclick = () => power("restart");
+  $("pw-stop").onclick = () => power("stop");
+  $("pw-start").onclick = () => power("start");
+
+  /* ---------------- console ---------------- */
+
+  const TERMS = ["term", "term2"];
+  let autoscroll = true;
+
+  function appendLines(lines, reset) {
+    const html = lines.map((l) => {
+      const tag = l.src === "panel" && l.lvl === "cmd" ? "CMD" : l.lvl.toUpperCase();
+      return `<div class="ln"><span class="t">[${esc(l.t)}]</span> <span class="${esc(l.lvl)}">[${tag}]</span> <span class="msg">${esc(l.msg)}</span></div>`;
+    }).join("");
+    TERMS.forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      if (reset) el.innerHTML = "";
+      if (html) el.insertAdjacentHTML("beforeend", html);
+      while (el.childElementCount > 500) el.firstElementChild.remove();
+      if (autoscroll) el.scrollTop = el.scrollHeight;
+    });
+  }
+
+  function setAutoscroll(v) {
+    autoscroll = v;
+    document.querySelectorAll("[data-sw]").forEach((sw) => {
+      sw.classList.toggle("on", v);
+      sw.setAttribute("aria-checked", String(v));
+    });
+    if (v) TERMS.forEach((id) => { const e = $(id); if (e) e.scrollTop = e.scrollHeight; });
+  }
+  document.querySelectorAll("[data-sw]").forEach((sw) => { sw.onclick = () => setAutoscroll(!autoscroll); });
+
+  /* ---------------- polling ---------------- */
+
+  function apply(data) {
+    const first = lastSeq === 0;
+    // o servidor subiu de novo: o que estava pendente virou realidade, e a lista de
+    // mods precisa ser relida pro aviso sumir sozinho em vez de esperar um clique
+    if (st && data.server.startedAt !== st.server.startedAt && modsDados?.pendente) {
+      modsCarregado = false;
+      if ($("mods").classList.contains("active")) loadMods();
+    }
+    st = data;
+    renderTop(); renderCounts(); renderPlayers(); renderBans(); renderWL();
+    renderHost(); renderTps(); renderPower(); renderAgenda();
+    if (data.console.lines.length || first) appendLines(data.console.lines, first);
+    coletarChat(data.console.lines);
+    lastSeq = data.console.seq;
+    if ($("chat").classList.contains("active") && chatBase >= 0) renderChat();
+  }
+
+  let ticks = 0;
+  async function tick() {
+    const base = API; // se trocar de servidor com o pedido em voo, a resposta velha é descartada
+    try {
+      const data = await api(`/state?seq=${lastSeq}`, {}, base);
+      if (base !== API) return;
+      apply(data);
+      // histórico muda pouco: refaz a cada 10s e só com a aba dele aberta
+      if (histVisivel() && ticks++ % 5 === 0) loadHistory();
+    } catch (err) {
+      if (err.message !== "sessão expirada") console.warn("poll:", err.message);
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    timer = setInterval(() => { if (!document.hidden) tick(); }, 2000);
+  }
+  function stopPolling() { if (timer) clearInterval(timer); timer = null; }
+
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && token) tick(); });
+
+  /* ---------------- servidores ---------------- */
+
+  function usarServidor(id) {
+    srvId = id;
+    API = `${RAIZ}/servers/${encodeURIComponent(id)}`;
+    localStorage.setItem("mcpanel_srv", id);
+  }
+
+  async function start() {
+    renderQuemSou();
+    const { servers } = await apiRaiz("/servers");
+    if (!servers?.length) throw new Error("nenhum servidor configurado");
+    // o último escolhido, se ele ainda existir na configuração
+    usarServidor(servers.some((s) => s.id === srvId) ? srvId : servers[0].id);
+    await recomecar();
+  }
+
+  /** Primeira carga do servidor selecionado — e é o mesmo caminho da troca. */
+  async function recomecar() {
+    lastSeq = 0;
+    chatHist = []; chatVivo = []; chatBase = -1;
+    ticks = 0;
+    agSujo = false; // a agenda é de cada servidor: edição pela metade não atravessa a troca
+    // a pasta de mods é de cada servidor: invalida pra não mostrar a lista do anterior
+    modsCarregado = false; modsDados = null;
+    $("nav-mcount").textContent = "";
+    await tick();
+    startPolling();
+  }
+
+  async function trocarServidor(id) {
+    fecharMenuSrv();
+    if (id === srvId) return;
+    stopPolling();
+    usarServidor(id);
+    await recomecar();
+    // o que carrega sob demanda não vem no /state: refaz pro servidor novo
+    if ($("servidor").classList.contains("active")) { loadBackupInfo(); loadGuardados(); }
+    if ($("chat").classList.contains("active")) loadChat();
+    if ($("mods").classList.contains("active")) loadMods();
+    if (histVisivel()) loadHistory();
+  }
+
+  /* ---------------- ações ---------------- */
+
+  /** Roda a ação, avisa e recarrega — o refresh muda conforme a tela. */
+  async function act(fn, okMsg, refresh = tick) {
+    try {
+      const r = await fn();
+      if (okMsg) toast(okMsg, false, (r && r.output) || "");
+      await refresh();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function runCmd(raw) {
+    const cmd = (raw || "").trim();
+    if (!cmd) return;
+    await act(() => post("/command", { command: cmd }));
+  }
+
+  async function banNick(nick) {
+    const reason = await ask({
+      title: `Banir ${nick}`,
+      label: "Motivo",
+      text: "O jogador é desconectado na hora e não consegue mais entrar.",
+      placeholder: "quebrou o spawn",
+      confirm: "Banir",
+    });
+    if (reason === null) return;
+    await act(() => post("/bans", { nick, reason }), `${nick} foi banido`);
+  }
+
+  async function kickNick(nick) {
+    const reason = await ask({
+      title: `Expulsar ${nick}`,
+      label: "Motivo (opcional)",
+      text: "Só desconecta — ele pode entrar de novo.",
+      placeholder: "volte mais tarde",
+      confirm: "Expulsar",
+    });
+    if (reason === null) return;
+    await act(() => post(`/players/${encodeURIComponent(nick)}/kick`, { reason }), `${nick} foi expulso`);
+  }
+
+  async function tellNick(nick) {
+    const msg = await ask({
+      title: `Mensagem para ${nick}`,
+      label: "Mensagem",
+      placeholder: "aparece só pra ele no chat",
+      confirm: "Enviar",
+    });
+    if (!msg) return;
+    await act(() => post("/chat/private", { nick, message: msg }), `mensagem enviada para ${nick}`);
+  }
+
+  async function broadcast() {
+    const msg = await ask({
+      title: "Avisar todo mundo",
+      label: "Mensagem",
+      placeholder: "servidor reinicia em 5 min",
+      confirm: "Enviar",
+    });
+    if (!msg) return;
+    await act(() => post("/chat/broadcast", { message: msg }), "mensagem enviada para todos");
+  }
+
+  async function wlAdd() {
+    const nick = await ask({
+      title: "Adicionar à whitelist",
+      label: "Nick",
+      placeholder: "SteveGamer",
+      confirm: "Adicionar",
+    });
+    if (!nick) return;
+    await act(() => post("/whitelist", { nick }), `${nick} entrou na whitelist`);
+  }
+
+  $("wl-toggle").onclick = async () => {
+    const ligando = !st.server.whitelistEnabled;
+    if (ligando) {
+      const fora = st.players.map((p) => p.nick).filter((n) => !st.whitelist.includes(n));
+      const aviso = fora.length
+        ? `Estão online e fora da lista: ${fora.join(", ")}. Quem não for operador é desconectado agora.`
+        : "Ninguém online fica de fora da lista.";
+      const ok = await ask({
+        title: "Ligar a whitelist",
+        label: 'digite LIGAR para confirmar',
+        text: `${aviso} A partir daí só os ${st.whitelist.length} nicks da lista entram.`,
+        placeholder: "LIGAR",
+        confirm: "Ligar whitelist",
+      });
+      if (ok !== "LIGAR") { if (ok !== null) toast("cancelado: era preciso digitar LIGAR", true); return; }
+    }
+    await act(() => post("/whitelist/toggle", { on: ligando }), ligando ? "whitelist ligada" : "whitelist desligada");
+  };
+
+  // popula a lista com quem já jogou — com online-mode ligado, nick pirata é recusado pela Mojang
+  $("wl-fill").onclick = async () => {
+    await loadHistory();
+    const faltando = hist.map((p) => p.nick).filter((n) => !st.whitelist.includes(n));
+    if (!faltando.length) { toast("todo mundo do histórico já está na whitelist"); return; }
+    const ok = await ask({
+      title: "Adicionar quem já jogou",
+      label: "digite OK para confirmar",
+      text: `${faltando.length} nick(s) entram na lista: ${faltando.join(", ")}. Contas não originais são recusadas pelo servidor.`,
+      placeholder: "OK",
+      confirm: "Adicionar",
+    });
+    if (ok !== "OK") return;
+    let entraram = 0;
+    for (const n of faltando) {
+      try { await post("/whitelist", { nick: n }); entraram++; }
+      catch (err) { toast(`${n}: ${err.message}`, true); }
+    }
+    await tick();
+    toast(`${entraram} de ${faltando.length} entraram na whitelist`);
+  };
+
+  document.addEventListener("click", (e) => {
+    const q = e.target.closest("[data-cmd]");
+    if (q) { runCmd(q.dataset.cmd); return; }
+    const a = e.target.closest("[data-act]");
+    if (a) {
+      const { act: type, nick } = a.dataset;
+      if (type === "ban") banNick(nick);
+      else if (type === "kick") kickNick(nick);
+      else if (type === "tell") tellNick(nick);
+      else if (type === "whitelist") act(() => post("/whitelist", { nick }), `${nick} entrou na whitelist`);
+      return;
+    }
+    const p = e.target.closest("[data-pardon]");
+    if (p) { act(() => del(`/bans/${encodeURIComponent(p.dataset.pardon)}`), `${p.dataset.pardon} foi perdoado`); return; }
+    const w = e.target.closest("[data-wlrm]");
+    if (w) { act(() => del(`/whitelist/${encodeURIComponent(w.dataset.wlrm)}`), `${w.dataset.wlrm} saiu da whitelist`); return; }
+    const r = e.target.closest("[data-rsdel]");
+    if (r) { apagarGuardado(r.dataset.rsdel); return; }
+  });
+
+  /* ---------------- comandos rápidos ---------------- */
+
+  const quick = [
+    { cmd: "list", lbl: "quem está on" },
+    { cmd: "__say", lbl: "avisar todos" },
+    { cmd: "weather clear", lbl: "limpar tempo" },
+    { cmd: "time set day", lbl: "amanhecer" },
+  ];
+  $("quick").innerHTML = quick.map((q) => `
+    <button class="qbtn" ${q.cmd === "__say" ? 'id="q-say"' : `data-cmd="${esc(q.cmd)}"`}>
+      <span class="pr">&gt;_</span><span class="txt">${esc(q.cmd === "__say" ? "say <mensagem>" : "/" + q.cmd)}</span><span class="lbl">${esc(q.lbl)}</span>
+    </button>`).join("");
+  $("q-say").onclick = broadcast;
+
+  /* ---------------- prompt do console ---------------- */
+
+  const history = [];
+  let hIdx = -1;
+
+  function wireConsole(inputId, sendId) {
+    const inp = $(inputId), snd = $(sendId);
+    if (!inp) return;
+    const go = () => {
+      const v = inp.value.trim();
+      if (!v) return;
+      history.push(v); hIdx = history.length;
+      inp.value = "";
+      runCmd(v);
+    };
+    snd.onclick = go;
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { go(); return; }
+      if (e.key === "ArrowUp" && history.length) { e.preventDefault(); hIdx = Math.max(0, hIdx - 1); inp.value = history[hIdx]; }
+      if (e.key === "ArrowDown" && history.length) { e.preventDefault(); hIdx = Math.min(history.length, hIdx + 1); inp.value = history[hIdx] || ""; }
+    });
+  }
+  wireConsole("cmd", "send");
+  wireConsole("cmd2", "send2");
+
+  /* ---------------- navegação ---------------- */
+
+  function goto(view) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === view));
+    document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
+    // quem rola é o .content, não a janela — o scrollTo(0,0) de antes não fazia nada
+    document.querySelector(".content").scrollTop = 0;
+    if (autoscroll) TERMS.forEach((id) => { const e = $(id); if (e) e.scrollTop = e.scrollHeight; });
+    if (view === "servidor") { loadBackupInfo(); loadGuardados(); }
+    if (view === "chat") loadChat();
+    if (view === "mods") loadMods();
+    if (view === "jogadores" && histVisivel()) loadHistory();
+  }
+  const histVisivel = () => $("jogadores").classList.contains("active") && $("hist-wrap").style.display !== "none";
+  document.querySelectorAll("[data-view]").forEach((el) => { el.onclick = () => goto(el.dataset.view); });
+  document.querySelectorAll("[data-goto]").forEach((el) => { el.onclick = () => goto(el.dataset.goto); });
+  // cada grupo de subabas lista seus painéis em data-panes; data-sub é o id do painel
+  document.querySelectorAll(".subtabs").forEach((grupo) => {
+    const panes = (grupo.dataset.panes || "").split(" ").filter(Boolean);
+    grupo.querySelectorAll(".subtab").forEach((t) => {
+      t.onclick = () => {
+        grupo.querySelectorAll(".subtab").forEach((s) => s.classList.remove("active"));
+        t.classList.add("active");
+        panes.forEach((id) => { $(id).style.display = id === t.dataset.sub ? "" : "none"; });
+        if (t.dataset.sub === "hist-wrap") loadHistory();
+      };
+    });
+  });
+
+  /* ---------------- modal: como acrescentar um servidor ---------------- */
+
+  const overlay = $("overlay");
+  $("addServerBtn").onclick = () => overlay.classList.add("open");
+  $("modalClose").onclick = () => overlay.classList.remove("open");
+  $("modalCancel").onclick = () => overlay.classList.remove("open");
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.remove("open"); };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    overlay.classList.remove("open");
+    if ($("ask").classList.contains("open")) closeAsk(null);
+  });
+
+  /* ---------------- boot ---------------- */
+
+  if (token) {
+    hideGate();
+    start().catch((err) => { if (err.message !== "sessão expirada") toast(err.message, true); });
+  } else {
+    showGate();
+  }
+</script>
+</body>
+</html>

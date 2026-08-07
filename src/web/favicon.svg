@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- CraftControl — o "C" hexagonal de metal abraçando um bloco de grama.
+       O anel é um hexágono vazado (evenodd) com uma mordida no lado direito; o
+       "dente" logo abaixo da mordida é o mesmo anel, pintado de verde por recorte.
+       Desenhado grosso de propósito: precisa ler a 16px na aba do navegador. -->
+  <defs>
+    <linearGradient id="cc-aco" x1=".15" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#C2CDD8"/>
+      <stop offset=".38" stop-color="#8A959F"/>
+      <stop offset=".72" stop-color="#5A6570"/>
+      <stop offset="1" stop-color="#3D4650"/>
+    </linearGradient>
+    <linearGradient id="cc-grama" x1=".1" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#AEEE63"/>
+      <stop offset="1" stop-color="#6DAF43"/>
+    </linearGradient>
+
+    <!-- o anel, reaproveitado três vezes -->
+    <path id="cc-anel" fill-rule="evenodd"
+          d="M32 2 58 17v30L32 62 6 47V17Z
+             M32 12.5 48.9 22.25v19.5L32 51.5 15.1 41.75v-19.5Z"/>
+    <mask id="cc-boca">
+      <rect width="64" height="64" fill="#fff"/>
+      <rect x="43" y="23.5" width="21" height="13.5" fill="#000"/>
+    </mask>
+    <clipPath id="cc-dente"><rect x="43" y="37" width="21" height="16"/></clipPath>
+  </defs>
+
+  <use href="#cc-anel" fill="url(#cc-aco)" mask="url(#cc-boca)"/>
+  <use href="#cc-anel" fill="#8CDB62" clip-path="url(#cc-dente)"/>
+
+  <!-- bloco de grama isométrico, com folga para o anel não encostar -->
+  <path fill="#8A5E34" d="M22 25.8 32 31.6v12L22 37.8Z"/>
+  <path fill="#5E4023" d="M32 31.6 42 25.8v12l-10 5.8Z"/>
+  <path fill="#6DAF43" d="M22 25.8 32 31.6v3.1l-10-5.8Z"/>
+  <path fill="#54903A" d="M32 31.6 42 25.8v3.1l-10 5.8Z"/>
+  <path fill="url(#cc-grama)" d="M32 20 42 25.8 32 31.6 22 25.8Z"/>
+</svg>

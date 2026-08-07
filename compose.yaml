@@ -1,0 +1,80 @@
+# CraftControl — anexa a um servidor Minecraft que já existe.
+#
+# Ponha este arquivo na MESMA pasta do compose do seu servidor (a que tem o
+# volume de dados dele) e suba com:
+#
+#     docker compose up -d
+#
+# Se o seu servidor está noutro compose, junte estes dois serviços a ele — o
+# painel precisa enxergar o contêiner do Minecraft pela rede do Docker.
+
+services:
+  craftcontrol:
+    image: ghcr.io/carlosj188/craftcontrol:1
+    container_name: craftcontrol
+    environment:
+      # ---- obrigatórios (vêm do .env) ----
+      RCON_PASSWORD: ${RCON_PASSWORD:?defina no .env}
+      JWT_SECRET: ${JWT_SECRET:?defina no .env}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?defina no .env}
+
+      # ---- seu servidor ----
+      # "dados" é o caminho DENTRO deste contêiner (o volume abaixo);
+      # "container" é o nome do contêiner do Minecraft, para ligar/desligar;
+      # "rconHost" é o nome do serviço dele na rede do Docker.
+      MC_SERVERS: >
+        [{"id":"principal",
+          "nome":"${MC_NAME:-Meu Servidor}",
+          "endereco":"${MC_ADDRESS:-}",
+          "rconHost":"${MC_HOST:-mc}",
+          "rconPorta":${MC_RCON_PORT:-25575},
+          "senhaEnv":"RCON_PASSWORD",
+          "dados":"/mcdata",
+          "container":"${MC_CONTAINER:-minecraft}"}]
+
+      # Liga/desliga/reinicia pelo painel, via socket-proxy (nunca o socket direto).
+      # Comente esta linha para desabilitar o controle de energia.
+      DOCKER_API: http://craftcontrol-socketproxy:2375
+
+      PORT: "8095"
+      TZ: ${TZ:-America/Sao_Paulo}
+
+    volumes:
+      # A pasta de dados do seu servidor (a que tem world/, mods/, logs/).
+      # Precisa ser LEITURA E ESCRITA: instalar mod e restaurar mundo escrevem aqui.
+      - ${MC_DATA:-./data}:/mcdata
+
+    ports:
+      - "${PANEL_PORT:-8095}:8095"
+
+    # o painel roda como uid 1000 — o mesmo dono dos dados na imagem itzg — para
+    # escrever no volume sem chown e sem root
+    user: "1000:1000"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # Deixa o painel só reiniciar/parar/iniciar o contêiner do Minecraft.
+  # O regex é a única coisa que passa: nada de criar contêiner, nada de montar host.
+  # Com mais de um servidor, inclua os outros nomes aqui, senão a energia volta 403.
+  craftcontrol-socketproxy:
+    image: wollomatic/socket-proxy:1
+    container_name: craftcontrol-socketproxy
+    command:
+      - '-loglevel=INFO'
+      - '-listenip=0.0.0.0'
+      - '-allowfrom=craftcontrol'
+      - '-allowGET=^/(v[0-9.]+/)?containers/${MC_CONTAINER:-minecraft}/json$$'
+      - '-allowPOST=^/(v[0-9.]+/)?containers/${MC_CONTAINER:-minecraft}/(start|stop|restart)(\?t=[0-9]+)?$$'
+      - '-watchdoginterval=600'
+      - '-stoponwatchdog'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

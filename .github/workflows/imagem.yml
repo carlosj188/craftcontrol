@@ -1,0 +1,58 @@
+name: imagem
+
+# Publica em ghcr.io/<dono>/craftcontrol.
+#   - push na main  -> tag :edge
+#   - tag v1.2.3    -> tags :1.2.3, :1.2 e :1
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # o frontend é um HTML único com script inline: erro de sintaxe nele não
+      # quebra o build, só deixa o painel abrir em branco. Confere antes.
+      - name: conferir a sintaxe do painel
+        run: |
+          python3 - <<'PY' > /tmp/painel.js
+          import io
+          html = io.open("src/web/index.html", encoding="utf-8").read()
+          io.open("/tmp/painel.js", "w", encoding="utf-8").write(
+              html[html.index("<script>") + 8 : html.rindex("</script>")])
+          PY
+          node --check /tmp/painel.js
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=edge,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
