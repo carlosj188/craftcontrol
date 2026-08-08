@@ -461,4 +461,4 @@ app.setNotFoundHandler((req, reply) => {
 await servers.iniciarTodos();
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
-console.log(`mcpanel ouvindo em :${PORT} — ${servers.lista().map((s) => `${s.id}@${s.cfg.rconHost}:${s.cfg.rconPorta}`).join(", ")}`);
+console.log(`CraftControl ouvindo em :${PORT} — ${servers.lista().map((s) => `${s.id}@${s.cfg.rconHost}:${s.cfg.rconPorta}`).join(", ")}`);
