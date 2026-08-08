@@ -7,18 +7,27 @@ import { lerEntradas } from "./jar.js";
  * a única parte do gerenciamento de mods que não é agnóstica — mover, apagar e
  * consultar o Modrinth funcionam igual para todos.
  *
- *   Fabric              mods/    fabric.mod.json                JSON
- *   Forge  (≤1.20.x)    mods/    META-INF/mods.toml             TOML
- *   NeoForge (1.20.5+)  mods/    META-INF/neoforge.mods.toml    TOML
+ *   Fabric              mods/     fabric.mod.json                JSON
+ *   Forge  (≤1.20.x)    mods/     META-INF/mods.toml             TOML
+ *   NeoForge (1.20.5+)  mods/     META-INF/neoforge.mods.toml    TOML
+ *   Bukkit e derivados  plugins/  plugin.yml                     YAML
+ *   Paper moderno       plugins/  paper-plugin.yml               YAML
  *
- * Quilt e plugins de Paper/Spigot ficaram de fora de propósito (decisão do Carlos
- * em 2026-08-07); os dois entram aqui sem mexer no resto quando forem pedidos.
+ * Quilt ficou de fora de propósito; entra aqui sem mexer no resto quando for pedido.
+ *
+ * A família Bukkit é diferente das outras numa coisa: os carregadores **herdam**
+ * uns dos outros. Fabric e Forge são mundos separados, mas Purpur roda plugin de
+ * Paper, que roda plugin de Spigot, que roda plugin de Bukkit. Quem sabe disso é
+ * a `cascata()` no fim deste arquivo, e é dela que sai tanto a escolha do perfil
+ * quanto o veredito de compatibilidade.
  */
 
 const ALVOS = [
   "META-INF/neoforge.mods.toml",
   "META-INF/mods.toml",
   "fabric.mod.json",
+  "paper-plugin.yml",
+  "plugin.yml",
   "META-INF/MANIFEST.MF",
 ];
 
@@ -171,6 +180,113 @@ function valorToml(bruto) {
   return bruto;
 }
 
+/* ---------------- YAML (só o pedaço que plugin.yml usa) ---------------- */
+
+/**
+ * Parser de subconjunto, na mesma linha do de TOML: mapas por indentação, listas
+ * em bloco (`- item`) e inline (`[a, b]`), escalares com e sem aspas, comentários
+ * e booleanos. Não é YAML completo — âncoras, blocos `|`/`>` e documentos
+ * múltiplos não aparecem em plugin.yml e ficam de fora.
+ *
+ * O que os arquivos reais obrigaram a cobrir:
+ *
+ *   - lista recuada em 1, 2 ou 4 espaços, ou **na mesma coluna da chave** — as
+ *     três formas são YAML válido e as três aparecem (squaremap, HuskHomes, Plan)
+ *   - escalar sem aspas com espaço no meio: `version: 5.8 build 3579` (Plan)
+ *   - `#` de comentário no fim da linha, sem estragar `website: https://…`
+ *
+ * Item de lista é sempre tratado como escalar: mapa dentro de lista não existe
+ * nestes arquivos, e fingir que existe só complicaria o parser.
+ */
+export function parseYaml(texto) {
+  const linhas = [];
+  for (const bruta of texto.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    if (!bruta.trim() || /^\s*#/.test(bruta)) continue;
+    linhas.push({ col: bruta.length - bruta.trimStart().length, txt: bruta.trim() });
+  }
+  return linhas.length ? parseNo(linhas, 0, linhas[0].col)[0] : {};
+}
+
+const ehItem = (txt) => txt === "-" || txt.startsWith("- ");
+
+function parseNo(ls, i, col) {
+  return ehItem(ls[i].txt) ? parseLista(ls, i, col) : parseMapa(ls, i, col);
+}
+
+function parseLista(ls, i, col) {
+  const out = [];
+  while (i < ls.length && ls[i].col === col && ehItem(ls[i].txt)) {
+    const corpo = tirarComentarioYaml(ls[i].txt.slice(1).trim());
+    if (corpo) out.push(valorYaml(corpo));
+    i++;
+  }
+  return [out, i];
+}
+
+function parseMapa(ls, i, col) {
+  const obj = {};
+  while (i < ls.length && ls[i].col === col && !ehItem(ls[i].txt)) {
+    const { txt } = ls[i];
+    const sep = separadorYaml(txt);
+    if (sep < 0) { i++; continue; }
+
+    const chave = txt.slice(0, sep).trim().replace(/^["']|["']$/g, "");
+    const bruto = tirarComentarioYaml(txt.slice(sep + 1).trim());
+    i++;
+
+    if (bruto) { obj[chave] = valorYaml(bruto); continue; }
+
+    // valor veio nas linhas de baixo: recuado (mapa ou lista) ou, no caso da
+    // lista, na mesma coluna da chave — `softdepend:` seguido de `- Vault`
+    if (i < ls.length && ls[i].col > col) [obj[chave], i] = parseNo(ls, i, ls[i].col);
+    else if (i < ls.length && ls[i].col === col && ehItem(ls[i].txt)) [obj[chave], i] = parseLista(ls, i, col);
+    else obj[chave] = null;
+  }
+  return [obj, i];
+}
+
+/**
+ * A posição do `:` que separa chave de valor. Em YAML ele é `: ` ou um `:` no
+ * fim da linha — por isso o `://` de uma URL não conta, e é isso que mantém
+ * `website: https://enginehub.org` inteiro.
+ */
+function separadorYaml(txt) {
+  let aspas = null;
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt[i];
+    if (aspas) { if (c === aspas) aspas = null; continue; }
+    if (c === '"' || c === "'") { aspas = c; continue; }
+    if (c === ":" && (i === txt.length - 1 || txt[i + 1] === " ")) return i;
+  }
+  return -1;
+}
+
+/** `#` só abre comentário no começo ou depois de espaço, e nunca dentro de aspas. */
+function tirarComentarioYaml(txt) {
+  let aspas = null;
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt[i];
+    if (aspas) { if (c === aspas) aspas = null; continue; }
+    if (c === '"' || c === "'") { aspas = c; continue; }
+    if (c === "#" && (i === 0 || txt[i - 1] === " ")) return txt.slice(0, i).trim();
+  }
+  return txt.trim();
+}
+
+function valorYaml(bruto) {
+  if (!bruto || bruto === "~" || bruto === "null") return null;
+  if (bruto === "true") return true;
+  if (bruto === "false") return false;
+  const s = /^"([\s\S]*)"$/.exec(bruto) || /^'([\s\S]*)'$/.exec(bruto);
+  if (s) return s[1];
+  if (bruto.startsWith("[") && bruto.endsWith("]")) return fatiar(bruto.slice(1, -1), ",").map(valorYaml);
+  // só inteiro vira número, de propósito: `api-version: 1.20` sem aspas é o caso
+  // comum e, lido como decimal, viraria 1.2 — o painel passaria a dizer que um
+  // plugin de 1.20 exige "1.2". Versão é texto, e aqui não há float nenhum.
+  if (/^-?\d+$/.test(bruto)) return Number(bruto);
+  return bruto;
+}
+
 /* ---------------- utilidades ---------------- */
 
 /**
@@ -271,10 +387,55 @@ function lerForge(texto, manifesto, carregador) {
   };
 }
 
+/**
+ * Plugin de Bukkit e derivados: `plugin.yml` (todos) e `paper-plugin.yml` (Paper
+ * moderno). Quando o jar traz os dois, o Paper usa o segundo e ignora o primeiro.
+ *
+ * Duas diferenças em relação a mod que mudam o resultado:
+ *
+ * - **`api-version` é um mínimo, não uma faixa.** Um plugin com `api-version: 1.13`
+ *   não está dizendo que roda em 1.21 — está dizendo que não roda antes de 1.13.
+ *   Por isso vai para `mcMinimo`, e não para `mcRange`: tratá-lo como faixa faria
+ *   o painel carimbar "compatível" em plugin de 2019, que é o erro que derruba
+ *   servidor.
+ * - **`softdepend` e `libraries` não são dependência.** O primeiro é opcional por
+ *   definição e o segundo é biblioteca Maven, baixada pelo próprio servidor.
+ *   Contá-los daria "depende de 8" num plugin que não precisa de nada.
+ */
+function lerBukkit(texto, carregador) {
+  const y = parseYaml(texto);
+  const lista = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]).map(String).filter(Boolean);
+
+  // paper-plugin.yml aninha as dependências e marca cada uma; sem `required`
+  // escrito, a spec do Paper considera obrigatória
+  const doServidor = y.dependencies?.server;
+  const doPaper = doServidor && typeof doServidor === "object" && !Array.isArray(doServidor)
+    ? Object.keys(doServidor).filter((k) => doServidor[k]?.required !== false)
+    : [];
+  const depende = [...new Set([...lista(y.depend), ...doPaper])];
+  const api = y["api-version"] == null ? null : String(y["api-version"]);
+
+  return {
+    carregador,
+    id: y.name ? String(y.name) : null,
+    nome: y.name ? String(y.name) : null,
+    versao: y.version == null ? null : String(y.version),
+    descricao: (y.description ? String(y.description) : "").trim() || null,
+    autores: lista(y.authors).length ? lista(y.authors) : lista(y.author),
+    depende,
+    dependeDeVerdade: depende.filter(dependenciaDeVerdade),
+    // plugin roda no servidor por definição: não existe plugin de cliente
+    ambiente: "server",
+    mcRange: null,
+    mcMinimo: api,
+    folia: y["folia-supported"] === true,
+  };
+}
+
 const VAZIO = {
   carregador: null, id: null, nome: null, versao: null, descricao: null,
   autores: [], depende: [], dependeDeVerdade: [], ambiente: null,
-  mcRange: null,
+  mcRange: null, mcMinimo: null, folia: false,
 };
 
 /**
@@ -310,6 +471,15 @@ export function identificar(arquivo) {
   const fabric = achados.get("fabric.mod.json");
   if (fabric) tentar("fabric", () => lerFabric(fabric));
 
+  // `paper-plugin.yml` sozinho quer dizer plugin que **só** roda em Paper e
+  // derivados: em Spigot puro ele nem carrega. É o caso do MiniPlaceholders, e
+  // é por isso que os dois viram perfis separados em vez de um só.
+  const paper = achados.get("paper-plugin.yml");
+  if (paper) tentar("paper", () => lerBukkit(paper, "paper"));
+
+  const bukkit = achados.get("plugin.yml");
+  if (bukkit) tentar("bukkit", () => lerBukkit(bukkit, "bukkit"));
+
   return { carregadores: Object.keys(perfis), perfis };
 }
 
@@ -319,13 +489,35 @@ export function identificar(arquivo) {
  * de um jar multi-loader vale) e em mods.js (qual carregador uma pasta só de
  * multi-loader tem). Duas listas divergiram uma vez; agora é uma só.
  */
-export const PREFERENCIA = ["fabric", "neoforge", "forge"];
+export const PREFERENCIA = ["fabric", "neoforge", "forge", "paper", "bukkit"];
+
+/** Quem herda de quem na família Bukkit. Fora dela, ninguém herda de ninguém. */
+const HERDA = { purpur: "paper", folia: "paper", paper: "spigot", spigot: "bukkit" };
+
+/** Carregadores da família Bukkit — os que aceitam plugin em vez de mod. */
+export const PLUGINS = ["purpur", "folia", "paper", "spigot", "bukkit"];
+
+export const usaPlugins = (carregador) => PLUGINS.includes(carregador);
+
+/**
+ * O que este servidor aceita, do mais específico ao mais genérico: um Purpur roda
+ * plugin escrito para Purpur, Paper, Spigot e Bukkit. Para Fabric e Forge a lista
+ * tem um item só — eles não herdam de ninguém, e é justamente essa diferença que
+ * justifica a função existir em vez de um `includes` espalhado.
+ */
+export function cascata(carregador) {
+  const out = [];
+  for (let c = carregador; c; c = HERDA[c]) out.push(c);
+  return out;
+}
 
 /**
  * O perfil que vale para este servidor. Com o jar servindo vários carregadores,
- * ganha o do servidor; sem carregador conhecido, o primeiro da preferência.
+ * ganha o mais específico que o servidor aceita; sem carregador conhecido, o
+ * primeiro da preferência.
  */
 export function escolherPerfil({ carregadores, perfis }, preferido) {
   if (!carregadores?.length) return { ...VAZIO };
-  return (preferido && perfis[preferido]) || perfis[PREFERENCIA.find((c) => perfis[c])];
+  for (const c of cascata(preferido)) if (perfis[c]) return perfis[c];
+  return perfis[PREFERENCIA.find((c) => perfis[c])];
 }

@@ -16,7 +16,9 @@
  */
 
 const POLL_MS = Number(process.env.TPS_POLL_MS || 5000);
-// sem ninguém olhando o painel não há motivo de ficar perguntando
+// sem ninguém olhando, a medição não para — só desacelera. O gráfico do dia
+// precisa de amostra o tempo todo, e a 1/min o custo é ~1.440 comandos por dia.
+const FUNDO_MS = Number(process.env.TPS_FUNDO_MS || 60_000);
 const OCIOSO_MS = Number(process.env.TPS_IDLE_MS || 45_000);
 const TICK_QUERY_MS = 15_000; // o custo é o mesmo, mas o número muda devagar
 const JANELA_MS = 120_000;    // guarda 2 min de amostras
@@ -26,7 +28,7 @@ const DESCONHECIDO_RE = /Unknown or incomplete command|<--\[HERE\]/i;
 
 const limpa = (s) => String(s || "").replace(/§[0-9a-fk-or]/gi, "").trim();
 
-export function criar({ rcon, online }) {
+export function criar({ rcon, online, registrar }) {
   const amostras = [];        // {gt, em}
   let tick = null;            // saída do `tick query`
   let tickSuportado = null;   // null = ainda não sei
@@ -34,25 +36,40 @@ export function criar({ rcon, online }) {
   let ultimoAcesso = 0;
   let erro = null;
   let timer = null;
+  let cadencia = 0;
 
-  /** O painel pediu estado: mantém a medição viva pelos próximos OCIOSO_MS. */
-  function acordar() {
-    ultimoAcesso = Date.now();
-    if (!timer) {
-      timer = setInterval(() => { medir().catch(() => {}); }, POLL_MS);
-      timer.unref();
-      medir().catch(() => {});
-    }
+  const olhando = () => Date.now() - ultimoAcesso <= OCIOSO_MS;
+
+  /**
+   * Uma medição só, duas cadências: rápida (5s) enquanto alguém está com o painel
+   * aberto, lenta (60s) o resto do tempo. Antes disso a medição simplesmente
+   * parava quando ninguém olhava — e aí o gráfico do dia ficava cheio de buraco
+   * em vez de mostrar a madrugada, que é justamente quando o servidor fica só
+   * com as farms e ninguém vê.
+   */
+  function ritmo(ms) {
+    if (cadencia === ms && timer) return;
+    if (timer) clearInterval(timer);
+    cadencia = ms;
+    timer = setInterval(() => { medir().catch(() => {}); }, ms);
+    timer.unref();
   }
 
-  function dormir() {
-    if (timer) clearInterval(timer);
-    timer = null;
-    amostras.length = 0; // o próximo Δ não pode atravessar o intervalo em que ninguém mediu
+  /** O painel pediu estado: acelera a medição pelos próximos OCIOSO_MS. */
+  function acordar() {
+    const primeiro = !olhando();
+    ultimoAcesso = Date.now();
+    ritmo(POLL_MS);
+    if (primeiro) medir().catch(() => {});
   }
 
   async function medir() {
-    if (Date.now() - ultimoAcesso > OCIOSO_MS) return dormir();
+    // volta ao ritmo de fundo quando o painel some, mas segue medindo
+    if (!olhando() && cadencia !== FUNDO_MS) {
+      ritmo(FUNDO_MS);
+      // o próximo Δ não pode atravessar a mudança de cadência com amostra velha
+      amostras.length = 0;
+    }
     if (online && !online()) { amostras.length = 0; return; }
 
     try {
@@ -87,6 +104,11 @@ export function criar({ rcon, online }) {
         }
       } catch { /* fica com o valor anterior */ }
     }
+
+    // o histórico quer uma amostra por minuto, não uma a cada 5s: quem decide
+    // se esta vale a pena gravar é o coletor, que conhece o próprio arquivo
+    const tps = taxa(60_000);
+    if (tps !== null) registrar?.(tps, tick?.mspt ?? null);
   }
 
   /**
@@ -142,6 +164,10 @@ export function criar({ rcon, online }) {
       erro,
     };
   }
+
+  // começa no ritmo de fundo já no boot: o gráfico não pode ter buraco à espera
+  // de alguém abrir o painel pela primeira vez
+  ritmo(FUNDO_MS);
 
   return { acordar, estado };
 }

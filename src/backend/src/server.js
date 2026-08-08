@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
@@ -79,14 +80,18 @@ app.addHook("onSend", async (req, reply) => {
   if (req.url.startsWith("/api/")) reply.header("Cache-Control", "no-store");
 });
 
-// download do mundo é navegação do navegador: não dá pra mandar header, vai de ticket
-const BACKUP_URL_RE = /^\/api\/servers\/([a-z0-9-]+)\/backup\/world\b/;
+// baixar é navegação do navegador: não dá pra mandar header, vai de ticket.
+// Cobre o backup ao vivo (/backup/world) e os arquivos já gravados em disco
+// (/backup/arquivos/<nome>) — o POST que emite o ticket é autenticado.
+const BACKUP_URL_RE = /^\/api\/servers\/([a-z0-9-]+)\/backup\/(?:world|arquivos\/[^/?]+)(?:\?|$)/;
 
 app.addHook("onRequest", async (req, reply) => {
   if (!req.url.startsWith("/api/")) return;
   if (req.url.startsWith("/api/auth/login")) return;
 
-  const bk = BACKUP_URL_RE.exec(req.url);
+  // só GET: o ticket serve para BAIXAR. Apagar continua exigindo token, senão
+  // a mesma URL com DELETE apagaria backup com um ticket de download.
+  const bk = req.method === "GET" && BACKUP_URL_RE.exec(req.url);
   if (bk) {
     const srv = servers.pegar(bk[1]);
     if (srv?.backup.useTicket(String(req.query?.ticket || ""))) return;
@@ -118,7 +123,7 @@ async function rotasServidor(app) {
   app.get("/state", async (req) => {
     const { srv } = req;
     const since = Number(req.query.seq || 0);
-    // alguém está olhando: mantém a medição de TPS acordada (ela dorme sozinha)
+    // alguém está olhando: acelera a medição de TPS (ela mede sempre, mas devagar)
     srv.tps.acordar();
     return {
       server: {
@@ -129,8 +134,10 @@ async function rotasServidor(app) {
         count: srv.state.count,
         max: srv.state.max,
         version: srv.state.version,
+        plataforma: srv.state.plataforma,
         startedAt: srv.state.startedAt,
         whitelistEnabled: srv.state.whitelistEnabled,
+        onlineMode: srv.state.onlineMode,
         error: srv.state.error,
       },
       servers: servers.resumo(),
@@ -336,6 +343,39 @@ async function rotasServidor(app) {
   });
 
   /* ---------------- reinício agendado ---------------- */
+
+  /**
+   * Histórico de desempenho para o gráfico. Fora do /state porque são 1.440
+   * pontos: pesado demais para um polling de 2s, e muda devagar.
+   */
+  app.get("/tps/historico", async (req) => req.srv.tpsHist.ler(req.query.horas));
+
+  /* ---------------- backup automático ---------------- */
+
+  app.get("/backup/auto", async (req) => req.srv.backupAuto.status());
+  app.put("/backup/auto", async (req) => req.srv.backupAuto.definir(req.body ?? {}));
+  app.post("/backup/auto/agora", async (req) => req.srv.backupAuto.agora());
+
+  /** Tudo que está na pasta de backups, inclusive o que o painel não gerencia. */
+  app.get("/backup/arquivos", async (req) => ({ arquivos: req.srv.backupAuto.listar() }));
+
+  app.delete("/backup/arquivos/:nome", async (req) => req.srv.backupAuto.apagar(req.params.nome));
+
+  /** Ticket de uso único para baixar: GET de navegador não manda Authorization. */
+  app.post("/backup/arquivos/:nome/ticket", async (req) => {
+    req.srv.backupAuto.caminho(req.params.nome); // 404 antes de emitir ticket à toa
+    return req.srv.backup.issueTicket();
+  });
+
+  /** Baixa um backup já gravado. Autenticado por ticket, no hook lá de cima. */
+  app.get("/backup/arquivos/:nome", async (req, reply) => {
+    const caminho = req.srv.backupAuto.caminho(req.params.nome);
+    return reply
+      .header("Content-Type", "application/gzip")
+      .header("Content-Disposition", `attachment; filename="${path.basename(caminho)}"`)
+      .header("Cache-Control", "no-store")
+      .send(fs.createReadStream(caminho));
+  });
 
   app.get("/agenda", async (req) => req.srv.agenda.status());
   app.put("/agenda", async (req) => req.srv.agenda.definir(req.body ?? {}));

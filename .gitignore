@@ -7,6 +7,8 @@
 data/
 mods-off/
 mods-lixo/
+plugins-off/
+plugins-lixo/
 backups/
 *.tar.gz
 

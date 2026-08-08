@@ -541,6 +541,84 @@
     display:grid;place-items:center;font-family:"JetBrains Mono",monospace;font-size:10.5px;
     color:var(--grass);background:rgba(109,175,67,.13);border:1px solid rgba(109,175,67,.22)}
 
+  /* ---------- gráfico de desempenho ----------
+     SVG desenhado à mão, sem biblioteca — é a mesma decisão do resto do projeto,
+     e uma linha com eixo custa menos código do que integrar uma lib.
+
+     O viewBox é fixo em 1000×220 e o SVG estica com `preserveAspectRatio:none`:
+     assim o traçado é calculado uma vez e o navegador cuida do redimensionamento.
+     Em troca, o traço deforma junto — por isso `vector-effect:non-scaling-stroke`
+     em tudo que é linha, senão a espessura estica com a largura da tela. */
+  .graf-abas{margin:0;padding:3px}
+  .graf-abas .subtab{padding:4px 11px;font-size:11.5px}
+  .graf-legenda{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+  .graf-val{font-family:"JetBrains Mono",monospace;font-size:19px;font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .graf-chave{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--faint)}
+  .graf-chave i{width:9px;height:9px;border-radius:3px;flex:none}
+  .graf-chave i.tps{background:var(--grass)}
+  .graf-chave i.jog{background:rgba(147,162,177,.45)}
+  .graf-vazio{margin-left:auto;font-size:11px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+
+  /* sem overflow:hidden de propósito — ele cortaria o balão de valor quando o
+     ponto está no alto do gráfico, que é justamente o caso normal (TPS em 20) */
+  .graf-caixa{position:relative;background:var(--inset);border:1px solid var(--line-soft);
+    border-radius:11px;padding:10px 10px 2px}
+  .graf-caixa svg{display:block;width:100%;height:190px}
+  .graf-eixo{display:flex;justify-content:space-between;padding:5px 2px 8px;
+    font-size:10px;color:var(--faint);font-family:"JetBrains Mono",monospace}
+  .graf-grade{stroke:var(--line-soft);stroke-width:1;vector-effect:non-scaling-stroke}
+  .graf-grade.forte{stroke:var(--line)}
+  .graf-jog{fill:rgba(147,162,177,.13)}
+  .graf-linha{fill:none;stroke:var(--grass);stroke-width:1.8;
+    stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+  .graf-area{fill:url(#graf-grad)}
+  /* trecho abaixo de 19 TPS ganha âmbar; abaixo de 15, vermelho. A cor reforça o
+     número, nunca substitui — o valor está escrito na legenda. */
+  .graf-linha.warn{stroke:var(--amber)}
+  .graf-linha.bad{stroke:var(--red)}
+  .graf-rot{stroke:rgba(224,179,65,.5);stroke-width:1;stroke-dasharray:3 3;
+    vector-effect:non-scaling-stroke}
+  .graf-cursor{stroke:var(--dim);stroke-width:1;vector-effect:non-scaling-stroke;opacity:0}
+  .graf-caixa:hover .graf-cursor{opacity:.6}
+  .graf-ponto{fill:var(--grass);r:3.5;opacity:0}
+  .graf-caixa:hover .graf-ponto{opacity:1}
+
+  .graf-tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;
+    background:var(--elev-2);border:1px solid var(--line);border-radius:9px;
+    padding:7px 10px;font-size:11.5px;line-height:1.5;white-space:nowrap;
+    box-shadow:0 10px 24px -10px rgba(0,0,0,.7);z-index:2}
+  .graf-caixa:hover .graf-tip{opacity:1}
+  .graf-tip b{font-family:"JetBrains Mono",monospace;font-weight:600}
+  .graf-tip .quando{display:block;color:var(--faint);font-size:10.5px;margin-bottom:2px}
+  .graf-sem{display:grid;place-items:center;height:190px;color:var(--faint);font-size:12.5px;
+    text-align:center;line-height:1.6}
+
+  /* ---------- backup automático ---------- */
+  .bka-manter{display:flex;align-items:center;gap:7px}
+  .bka-manter input{width:64px;background:var(--inset);border:1px solid var(--line);
+    border-radius:9px;color:var(--fg);padding:8px 10px;font-family:"JetBrains Mono",monospace;
+    font-size:14px;color-scheme:dark;outline:none}
+  .bka-manter input:focus{border-color:var(--grass-lo)}
+  .bka-manter span{font-size:11.5px;color:var(--faint)}
+
+  .bka-lista{display:grid;gap:8px;margin-top:16px;padding-top:14px;
+    border-top:1px solid var(--line-soft)}
+  .bka-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:10px;
+    border:1px solid var(--line-soft);background:var(--elev);min-width:0}
+  /* cópia feita à mão, fora da rotação: fica marcada para ninguém achar que o
+     painel vai girá-la junto com as outras */
+  .bka-row.manual{border-style:dashed}
+  .bka-row .bki{min-width:0;flex:1}
+  .bka-row .bkn{font-size:13px;font-weight:500;font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bka-row .bkm{font-size:11px;color:var(--faint);margin-top:1px}
+  .bka-acts{display:flex;gap:6px;flex:none}
+  @media (hover:hover) and (min-width:921px){
+    .bka-acts{opacity:0;transition:opacity .14s}
+    .bka-row:hover .bka-acts,.bka-row:focus-within .bka-acts{opacity:1}
+  }
+
   /* ---------- mods ---------- */
   .mods-acoes{display:flex;align-items:center;gap:9px;flex:none}
   .mods-filtro{width:210px;background:var(--inset);border:1px solid var(--line);border-radius:9px;
@@ -894,7 +972,7 @@
       </div>
       <div class="nav-item" data-view="mods">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.6l8 4.2v10.4l-8 4.2-8-4.2V6.8z"/><path d="M4 6.8l8 4.2 8-4.2M12 11v10.4"/></svg>
-        Mods <span class="badge" id="nav-mcount"></span>
+        <span id="nav-mods-rotulo">Mods</span> <span class="badge" id="nav-mcount"></span>
       </div>
       <div class="nav-item" data-view="servidor">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
@@ -1148,8 +1226,7 @@
               <div class="banner">
                 <span>Com a whitelist ligada só entra quem está na lista — e quem estiver online fora dela
                   cai na hora (<span class="mono">enforce-whitelist=true</span>). Operadores passam sempre.
-                  Como o servidor está em <span class="mono">online-mode=true</span>, o
-                  <span class="mono">whitelist add</span> resolve o nick na Mojang: conta pirata não entra na lista.</span>
+                  <span id="wl-online-mode"></span></span>
               </div>
               <div class="wl-head">
                 <div class="toggle">whitelist <span id="wl-state" class="mono">–</span>
@@ -1168,9 +1245,33 @@
         <div class="page-head">
           <div>
             <div class="page-title">Servidor</div>
-            <div class="page-sub">Energia do contêiner e backup do mundo</div>
+            <div class="page-sub">Desempenho, energia e backup do mundo</div>
           </div>
           <button class="ghost" data-goto="mais">Roadmap</button>
+        </div>
+
+        <!-- ===== DESEMPENHO ===== -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">
+            <div class="card-title">Desempenho</div>
+            <div class="subtabs graf-abas" id="graf-abas">
+              <div class="subtab active" data-horas="24">24 h</div>
+              <div class="subtab" data-horas="48">48 h</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="graf-legenda">
+              <span class="graf-val" id="graf-agora">–</span>
+              <span class="graf-chave"><i class="tps"></i>TPS</span>
+              <span class="graf-chave"><i class="jog"></i>jogadores</span>
+              <span class="graf-vazio" id="graf-info"></span>
+            </div>
+            <div class="graf-caixa" id="graf-caixa">
+              <svg id="graf" viewBox="0 0 1000 220" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <div class="graf-eixo" id="graf-eixo"></div>
+              <div class="graf-tip" id="graf-tip"></div>
+            </div>
+          </div>
         </div>
 
         <div class="card" style="margin-bottom:16px">
@@ -1260,6 +1361,55 @@
           </div>
         </div>
 
+        <!-- ===== BACKUP AUTOMÁTICO ===== -->
+        <div class="card" style="margin-top:16px" id="bka-card">
+          <div class="card-head">
+            <div class="card-title">Backup automático</div>
+            <div class="toggle"><span id="bka-estado" class="mono">–</span>
+              <div class="sw" id="bka-ativo" role="switch" aria-checked="false" tabindex="0"></div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="banner off" id="bka-indisponivel" style="display:none">
+              Não há pasta de backups montada. Acrescente um volume em <span class="mono">/backups</span>
+              no compose do painel e aponte <span class="mono">"backups"</span> no
+              <span class="mono">MC_SERVERS</span>.
+            </div>
+
+            <div id="bka-corpo">
+              <div class="ag-proximo" id="bka-proximo">–</div>
+
+              <div class="ag-linha">
+                <label class="ag-campo">
+                  <span>Horário</span>
+                  <input type="time" id="bka-hora" value="04:00">
+                </label>
+                <div class="ag-campo" style="flex:1;min-width:220px">
+                  <span>Dias</span>
+                  <div class="ag-dias" id="bka-dias"></div>
+                </div>
+                <label class="ag-campo">
+                  <span>Guardar</span>
+                  <div class="bka-manter">
+                    <input type="number" id="bka-manter" min="1" max="30" value="7">
+                    <span>cópias</span>
+                  </div>
+                </label>
+              </div>
+
+              <div class="ag-rodape">
+                <div class="hint" style="margin:0" id="bka-hint"></div>
+                <div class="ag-botoes">
+                  <button class="btn sec" id="bka-agora">Fazer agora</button>
+                  <button class="btn pri" id="bka-salvar" disabled>Salvar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="bka-lista" id="bka-lista"></div>
+          </div>
+        </div>
+
         <div class="card" style="margin-top:16px">
           <div class="card-head"><div class="card-title">Restaurar um backup</div></div>
           <div class="card-body">
@@ -1291,13 +1441,13 @@
         </div>
       </section>
 
-      <!-- ===== MODS =====
-           Fase 1: só leitura. Nada aqui escreve na pasta de mods — instalar,
-           remover e desativar vêm depois, e cada um precisa da sua confirmação. -->
+      <!-- ===== MODS (ou PLUGINS) =====
+           A aba é a mesma nos dois casos: o que muda é a pasta lida e a palavra
+           na tela, ambas decididas pela plataforma que o backend detecta. -->
       <section class="view" id="mods">
         <div class="page-head">
           <div>
-            <div class="page-title">Mods</div>
+            <div class="page-title" id="mods-titulo">Mods</div>
             <div class="page-sub" id="mods-sub">Lendo a pasta…</div>
           </div>
           <div class="mods-acoes">
@@ -1377,7 +1527,7 @@
   <button class="tab" data-view="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></svg>Chat</button>
   <button class="tab" data-view="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>Console</button>
   <button class="tab" data-view="moderacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>Moderar</button>
-  <button class="tab" data-view="mods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.6l8 4.2v10.4l-8 4.2-8-4.2V6.8z"/><path d="M4 6.8l8 4.2 8-4.2M12 11v10.4"/></svg>Mods</button>
+  <button class="tab" data-view="mods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.6l8 4.2v10.4l-8 4.2-8-4.2V6.8z"/><path d="M4 6.8l8 4.2 8-4.2M12 11v10.4"/></svg><span id="tab-mods-rotulo">Mods</span></button>
   <button class="tab" data-view="servidor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Servidor</button>
 </nav>
 
@@ -1418,7 +1568,7 @@
 <div class="overlay" id="addmod">
   <div class="modal" role="dialog" aria-modal="true">
     <div class="modal-head">
-      <h3>Adicionar mod</h3>
+      <h3 id="addmod-titulo">Adicionar mod</h3>
       <button class="icon-btn" id="addmod-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="modal-body">
@@ -2072,6 +2222,14 @@
         <div class="act"><button class="mini ban" data-wlrm="${esc(n)}">Remover</button></div>
       </div>`).join("") + `<div class="listrow add" id="wl-add">+ adicionar jogador</div>`;
     $("wl-state").textContent = st.server.whitelistEnabled ? "ligada" : "desligada";
+    // em offline-mode a whitelist funciona igual, mas só compara o nick digitado:
+    // quem souber um nome da lista entra com ele. Dizer o contrário seria vender
+    // uma proteção que este servidor não tem.
+    $("wl-online-mode").innerHTML = st.server.onlineMode === false
+      ? `Este servidor está em <span class="mono">online-mode=false</span>: a whitelist
+         aceita qualquer nick, e confere só o nome — quem souber um nome da lista entra com ele.`
+      : `Como o servidor está em <span class="mono">online-mode=true</span>, o
+         <span class="mono">whitelist add</span> resolve o nick na Mojang: conta pirata não entra na lista.`;
     $("wl-toggle").classList.toggle("on", st.server.whitelistEnabled);
     $("wl-toggle").setAttribute("aria-checked", String(st.server.whitelistEnabled));
     $("wl-add").onclick = wlAdd;
@@ -2121,9 +2279,9 @@
   /* ---------------- mods ---------------- */
 
   /**
-   * Fase 1: só leitura. A varredura abre dezenas de jars e fala com o Modrinth,
-   * então nada disso vive no polling de 2s — carrega quando a aba abre e só
-   * repete se pedirem. `modsCarregado` evita reler a cada ida e volta de aba.
+   * A varredura abre dezenas de jars e fala com o Modrinth, então nada disso vive
+   * no polling de 2s — carrega quando a aba abre e só repete se pedirem.
+   * `modsCarregado` evita reler a cada ida e volta de aba.
    */
   let modsDados = null;
   let modsCarregado = false;
@@ -2132,7 +2290,37 @@
   let aplicando = false;   // ciclo de aplicar+vigiar em curso
   let aplicarTimer = null;
 
-  const CARREGADOR_NOME = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge" };
+  const CARREGADOR_NOME = {
+    fabric: "Fabric", forge: "Forge", neoforge: "NeoForge",
+    paper: "Paper", purpur: "Purpur", folia: "Folia", spigot: "Spigot", bukkit: "Bukkit",
+  };
+  const FAMILIA_PLUGIN = ["purpur", "folia", "paper", "spigot", "bukkit"];
+  // a mesma herança do modmeta.js do backend: um Purpur carrega plugin declarado
+  // para Paper, Spigot ou Bukkit. Sem isto a lista marcava "não é Paper" em cima
+  // de todo plugin legítimo, que declara só "bukkit".
+  const HERDA_UI = { purpur: "paper", folia: "paper", paper: "spigot", spigot: "bukkit" };
+  function servidorAceita(doServidor, doJar) {
+    if (!doServidor || !doJar) return true;
+    for (let c = doServidor; c; c = HERDA_UI[c]) if (c === doJar) return true;
+    return false;
+  }
+
+  /**
+   * Num servidor Paper isto tudo se chama plugin, não mod — e chamar de mod é o
+   * tipo de detalhe que faz o usuário duvidar se o painel entendeu o servidor
+   * dele. Uma fonte só para a palavra, atualizada quando a lista chega.
+   */
+  let termos = { s: "mod", p: "mods", S: "Mod", P: "Mods", pasta: "mods/" };
+  function definirTermos(carregador) {
+    const plugin = FAMILIA_PLUGIN.includes(carregador);
+    termos = plugin
+      ? { s: "plugin", p: "plugins", S: "Plugin", P: "Plugins", pasta: "plugins/" }
+      : { s: "mod", p: "mods", S: "Mod", P: "Mods", pasta: "mods/" };
+    $("mods-titulo").textContent = termos.P;
+    $("nav-mods-rotulo").textContent = termos.P;
+    $("tab-mods-rotulo").textContent = termos.P;  // a barra de abas do celular
+    $("addmod-q").placeholder = `nome do ${termos.s}…`;
+  }
 
   async function loadMods(forcar = false) {
     if (modsCarregado && !forcar) return;
@@ -2161,19 +2349,21 @@
     const d = modsDados;
     if (!d) return;
 
+    definirTermos(d.carregador);
     $("nav-mcount").textContent = d.temPasta ? d.total : "";
 
     if (!d.temPasta) {
       $("mods-sub").textContent = "este servidor não tem pasta de mods";
       $("mods-resumo").style.display = "none";
       $("mods-aviso").style.display = "none";
-      $("mods-lista").innerHTML = `<div class="empty">Nenhuma pasta <span class="mono">mods/</span> no volume deste servidor.<br>
-        Servidor vanilla ou de plugins não usa esta aba.</div>`;
+      $("mods-lista").innerHTML = `<div class="empty">Nenhuma pasta <span class="mono">mods/</span> nem
+        <span class="mono">plugins/</span> no volume deste servidor.<br>
+        Servidor vanilla não usa esta aba.</div>`;
       return;
     }
 
     const carregador = CARREGADOR_NOME[d.carregador] || "carregador não identificado";
-    $("mods-sub").textContent = `${carregador}${d.versaoJogo ? " · " + d.versaoJogo : ""} · lidos da pasta mods/`;
+    $("mods-sub").textContent = `${carregador}${d.versaoJogo ? " · " + d.versaoJogo : ""} · lidos da pasta ${termos.pasta}`;
 
     // o painel funciona inteiro sem internet; só o enriquecimento fica de fora
     const aviso = $("mods-aviso");
@@ -2234,9 +2424,9 @@
 
     if (!lista.length) {
       const vazio = modsAba === "off"
-        ? "Nenhum mod desativado.<br>Desativar tira o jar da pasta que o servidor lê, sem apagar nada."
+        ? `Nenhum ${termos.s} desativado.<br>Desativar tira o jar da pasta que o servidor lê, sem apagar nada.`
         : "A pasta está vazia.";
-      $("mods-lista").innerHTML = `<div class="empty">${termo ? "Nenhum mod com esse nome." : vazio}</div>`;
+      $("mods-lista").innerHTML = `<div class="empty">${termo ? `Nenhum ${termos.s} com esse nome.` : vazio}</div>`;
       return;
     }
 
@@ -2266,7 +2456,7 @@
 
       const deps = [...new Set(m.dependeDeVerdade.map(nomeDaDep))];
       const dep = deps.length === 1 ? `depende de ${deps[0]}`
-        : deps.length ? `depende de ${deps.length} mods`
+        : deps.length ? `depende de ${deps.length} ${termos.p}`
         : null;
 
       const meta = [versaoCurta(m.versao) || "versão desconhecida", bytes(m.bytes), dep]
@@ -2283,11 +2473,11 @@
         tags.push(`<span class="mtag up" title="versão ${esc(m.atualizacao.versao)}${m.atualizacao.em ? `, publicada em ${esc(m.atualizacao.em.slice(0, 10))}` : ""}">→ ${esc(versaoCurta(m.atualizacao.versao))}</span>`);
       }
       // jar que não declara o carregador deste servidor não é carregado: peso morto
-      if (m.carregador && d.carregador && m.carregador !== d.carregador) {
+      if (m.carregador && d.carregador && !servidorAceita(d.carregador, m.carregador)) {
         tags.push(`<span class="mtag err" title="este jar declara ${esc(CARREGADOR_NOME[m.carregador] || m.carregador)} e o servidor é ${esc(carregador)} — ele não é carregado">não é ${esc(carregador)}</span>`);
       }
-      if (m.modrinth?.clienteSo) tags.push(`<span class="mtag cli" title="o Modrinth marca este mod como não suportado no servidor">só cliente</span>`);
-      if (!m.carregador) tags.push(`<span class="mtag err" title="não achei fabric.mod.json nem mods.toml dentro do jar">não identificado</span>`);
+      if (m.modrinth?.clienteSo) tags.push(`<span class="mtag cli" title="o Modrinth marca este ${termos.s} como não suportado no servidor">só cliente</span>`);
+      if (!m.carregador) tags.push(`<span class="mtag err" title="não achei fabric.mod.json, mods.toml nem plugin.yml dentro do jar">não identificado</span>`);
 
       if (!m.ativo) tags.push(`<span class="mtag desl">desativado</span>`);
 
@@ -2327,7 +2517,7 @@
     if (!n) return "";
     const nomes = m.usadoPor.slice(0, 4).join(", ");
     const resto = n > 4 ? ` e mais ${n - 4}` : "";
-    return `${n} ${n === 1 ? "mod ativo depende" : "mods ativos dependem"} dele: ${nomes}${resto}. `
+    return `${n} ${n === 1 ? termos.s + " ativo depende" : termos.p + " ativos dependem"} dele: ${nomes}${resto}. `
       + `${n === 1 ? "Ele não vai carregar" : "Eles não vão carregar"} no próximo boot.`;
   }
 
@@ -2378,8 +2568,8 @@
   $("mods-atualizar-todos").onclick = async () => {
     const n = (modsDados?.mods || []).filter((m) => m.atualizacao).length;
     if (!await confirmarCom("ATUALIZAR", {
-      title: "Atualizar todos os mods",
-      text: `${n} ${n === 1 ? "mod vai ser baixado" : "mods vão ser baixados"} na versão mais nova compatível. `
+      title: `Atualizar todos os ${termos.p}`,
+      text: `${n} ${n === 1 ? termos.s + " vai ser baixado" : termos.p + " vão ser baixados"} na versão mais nova compatível. `
         + `${n === 1 ? "O jar antigo fica" : "Os jars antigos ficam"} guardados até o servidor subir bem — se ele não subir, tudo volta sozinho.`,
       confirm: "Atualizar",
     })) return;
@@ -2392,7 +2582,7 @@
         toast(`${r.feitos.length} de ${r.total} atualizados; ${r.falhos.length} falharam`, true,
           r.falhos.map((f) => f.arquivo).join(", "));
       } else {
-        toast(`${r.feitos.length} ${r.feitos.length === 1 ? "mod atualizado" : "mods atualizados"}`);
+        toast(`${r.feitos.length} ${r.feitos.length === 1 ? termos.s + " atualizado" : termos.p + " atualizados"}`);
       }
       await loadMods(true);
     } catch (err) {
@@ -2419,7 +2609,7 @@
     avisando: "avisando quem está jogando…",
     reiniciando: "reiniciando o servidor…",
     esperando: "esperando o servidor voltar…",
-    revertendo: "não subiu — devolvendo os mods de antes…",
+    revertendo: "não subiu — devolvendo o que estava antes…",
     pronto: "pronto",
     revertido: "revertido",
     "revertido-sem-confirmar": "revertido, mas o servidor ainda não confirmou",
@@ -2433,7 +2623,7 @@
     el.className = "banner mods-pend" + (s.ok === false ? " off" : "");
     const titulo = FASES_MODS[s.fase] || s.fase || "";
     $("mods-aplicando-txt").innerHTML = s.rodando
-      ? `<b>Aplicando mudanças de mod.</b> ${esc(titulo)}<br>
+      ? `<b>Aplicando mudanças.</b> ${esc(titulo)}<br>
          <span class="mono" style="font-size:11.5px">${esc(s.detalhe || "")}</span>`
       : s.ok
         ? `<b>Mods aplicados.</b> ${esc(s.detalhe || "")}`
@@ -2462,8 +2652,8 @@
 
       // acabou agora: a pasta pode ter sido revertida por baixo
       await loadMods(true);
-      if (s.ok) toast("mods aplicados e servidor no ar");
-      else if (s.revertido) toast("não subiu: os mods de antes foram restaurados", true);
+      if (s.ok) toast(`${termos.p} aplicados e servidor no ar`);
+      else if (s.revertido) toast(`não subiu: os ${termos.p} de antes foram restaurados`, true);
       setTimeout(() => { if (!aplicando) { mostrarAplicando(null); renderMods(); } }, 20000);
     } catch {
       if (aplicando) aplicarTimer = setTimeout(seguirAplicacao, 5000);
@@ -2516,6 +2706,7 @@
   function abrirAdd() {
     $("addmod").classList.add("open");
     addAba("buscar");
+    $("addmod-titulo").textContent = `Adicionar ${termos.s}`;
     const d = modsDados;
     $("addmod-escopo").textContent = d
       ? `Mostrando só o que serve ${CARREGADOR_NOME[d.carregador] || "este carregador"}${d.versaoJogo ? " " + d.versaoJogo : ""}.`
@@ -2651,7 +2842,7 @@
       if (err.status === 422 && err.veredito) {
         addUltimo = arquivo;
         $("addmod-recusa").style.display = "";
-        $("addmod-recusa").innerHTML = `<b>Este mod não serve neste servidor.</b><br>`
+        $("addmod-recusa").innerHTML = `<b>Este ${termos.s} não serve neste servidor.</b><br>`
           + err.veredito.motivos.map((m) => "• " + esc(m)).join("<br>")
           + `<br><span class="hint" style="color:inherit;opacity:.85">Se ele entrar assim, o servidor ignora ou nem sobe.</span>`;
         $("addmod-forcar-wrap").style.display = "";
@@ -2795,6 +2986,368 @@
   }
   $("chat-send").onclick = enviarChat;
   $("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); enviarChat(); } });
+
+  /* ---------------- gráfico de desempenho ---------------- */
+
+  let grafHoras = 24;
+  let grafPontos = [];
+
+  const GRAF_W = 1000, GRAF_H = 220;
+  const GRAF_TOPO = 12, GRAF_BASE = GRAF_H - 18;
+
+  /**
+   * Desenha a série no SVG.
+   *
+   * Duas decisões que mudam o que o gráfico diz:
+   *
+   * - **Buraco é buraco.** Amostra faltando (servidor fora do ar, painel parado)
+   *   vira interrupção no traçado, não linha caindo a zero. Ligar os pontos por
+   *   cima do vazio inventaria um travamento que não houve.
+   * - **A cor do trecho é a do pior ponto dele.** Cada segmento contínuo é
+   *   pintado por faixa (≥19 verde, ≥15 âmbar, abaixo vermelho), então uma queda
+   *   de dois minutos aparece mesmo num gráfico de 24 h.
+   */
+  function desenharGrafico() {
+    const svg = $("graf");
+    const caixa = $("graf-caixa");
+    const pontos = grafPontos;
+
+    if (!pontos.length) {
+      svg.innerHTML = "";
+      svg.style.display = "none";
+      if (!caixa.querySelector(".graf-sem")) {
+        caixa.insertAdjacentHTML("afterbegin",
+          `<div class="graf-sem">Ainda sem histórico.<br>O painel coleta uma amostra por minuto —<br>volte daqui a pouco.</div>`);
+      }
+      $("graf-eixo").innerHTML = "";
+      return;
+    }
+    caixa.querySelector(".graf-sem")?.remove();
+    svg.style.display = "";
+
+    const fim = Date.now() / 1000;
+    const ini = fim - grafHoras * 3600;
+    const x = (t) => ((t - ini) / (fim - ini)) * GRAF_W;
+    const y = (tps) => GRAF_BASE - (Math.min(20, Math.max(0, tps)) / 20) * (GRAF_BASE - GRAF_TOPO);
+
+    // corta em segmentos: intervalo maior que 3 amostras seguidas é ausência
+    const passo = 60;
+    const segmentos = [];
+    let atual = [];
+    for (const p of pontos) {
+      if (atual.length && p[0] - atual[atual.length - 1][0] > passo * 3) {
+        segmentos.push(atual); atual = [];
+      }
+      atual.push(p);
+    }
+    if (atual.length) segmentos.push(atual);
+
+    const maxJog = Math.max(1, ...pontos.map((p) => p[3]));
+    const yJog = (n) => GRAF_BASE - (n / maxJog) * (GRAF_BASE - GRAF_TOPO) * 0.42;
+
+    const partes = [];
+
+    // grade: 20, 15, 10, 5 TPS. A de 20 é a forte — é o teto do jogo.
+    for (const v of [20, 15, 10, 5]) {
+      partes.push(`<line class="graf-grade${v === 20 ? " forte" : ""}" x1="0" y1="${y(v).toFixed(1)}" x2="${GRAF_W}" y2="${y(v).toFixed(1)}"/>`);
+    }
+
+    for (const seg of segmentos) {
+      if (seg.length < 2) continue;
+      // área de jogadores por baixo, em eixo próprio: mostra a correlação sem
+      // competir com a leitura do TPS
+      const areaJog = seg.map((p) => `${x(p[0]).toFixed(1)},${yJog(p[3]).toFixed(1)}`).join(" ");
+      partes.push(`<polygon class="graf-jog" points="${x(seg[0][0]).toFixed(1)},${GRAF_BASE} ${areaJog} ${x(seg[seg.length - 1][0]).toFixed(1)},${GRAF_BASE}"/>`);
+
+      // quebra o segmento por faixa de qualidade, para a cor acompanhar a queda
+      let atualFaixa = faixaDe(seg[0][1]);
+      let buffer = [seg[0]];
+      const solta = () => {
+        if (buffer.length < 2) return;
+        const d = buffer.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+        partes.push(`<path class="graf-linha ${atualFaixa}" d="${d}"/>`);
+      };
+      for (let i = 1; i < seg.length; i++) {
+        const f = faixaDe(seg[i][1]);
+        buffer.push(seg[i]);
+        if (f !== atualFaixa) {
+          solta();
+          atualFaixa = f;
+          buffer = [seg[i]]; // recomeça no ponto de virada: sem furo entre as cores
+        }
+      }
+      solta();
+    }
+
+    partes.push(`<line class="graf-cursor" id="graf-cursor" x1="0" y1="${GRAF_TOPO}" x2="0" y2="${GRAF_BASE}"/>`);
+    partes.push(`<circle class="graf-ponto" id="graf-ponto" cx="0" cy="0"/>`);
+    svg.innerHTML = partes.join("");
+
+    // eixo do tempo: marcas de hora redonda, no máximo 6
+    const marcas = [];
+    const passoH = Math.max(1, Math.round(grafHoras / 6));
+    for (let h = 0; h <= grafHoras; h += passoH) {
+      const d = new Date((fim - (grafHoras - h) * 3600) * 1000);
+      marcas.push(`<span>${String(d.getHours()).padStart(2, "0")}h</span>`);
+    }
+    $("graf-eixo").innerHTML = marcas.join("");
+
+    // o número grande é o TPS ao vivo do /state, não o último ponto da série:
+    // assim ele bate com o card da visão geral em vez de ficar até 1 min atrás
+    const vivo = st?.tps?.tps1m ?? st?.tps?.tps10s ?? pontos[pontos.length - 1][1];
+    $("graf-agora").innerHTML = `${vivo.toFixed(1)} <span class="hint" style="margin:0">TPS agora</span>`;
+
+    const piorTps = Math.min(...pontos.map((p) => p[1]));
+    const maxJogVisto = Math.max(...pontos.map((p) => p[3]));
+    $("graf-info").textContent = `mínima ${piorTps.toFixed(1)} · pico de ${maxJogVisto} ${maxJogVisto === 1 ? "jogador" : "jogadores"}`;
+  }
+
+  const faixaDe = (tps) => (tps >= 19 ? "" : tps >= 15 ? "warn" : "bad");
+
+  /** Segue o mouse: acha a amostra mais próxima e mostra o valor dela. */
+  $("graf-caixa").addEventListener("mousemove", (e) => {
+    if (!grafPontos.length) return;
+    const caixa = $("graf-caixa");
+    const r = caixa.getBoundingClientRect();
+    const svgR = $("graf").getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - svgR.left) / svgR.width));
+
+    const fim = Date.now() / 1000;
+    const ini = fim - grafHoras * 3600;
+    const alvoT = ini + frac * (fim - ini);
+
+    let melhor = grafPontos[0];
+    for (const p of grafPontos) {
+      if (Math.abs(p[0] - alvoT) < Math.abs(melhor[0] - alvoT)) melhor = p;
+    }
+    // longe demais de qualquer amostra: é uma lacuna, não invente valor
+    const dentro = Math.abs(melhor[0] - alvoT) < (grafHoras * 3600) / 40;
+
+    const cursor = $("graf-cursor"), ponto = $("graf-ponto"), tip = $("graf-tip");
+    if (!dentro) { tip.style.opacity = "0"; cursor.style.opacity = "0"; ponto.style.opacity = "0"; return; }
+    tip.style.opacity = ""; cursor.style.opacity = ""; ponto.style.opacity = "";
+
+    const px = ((melhor[0] - ini) / (fim - ini)) * GRAF_W;
+    const py = GRAF_BASE - (Math.min(20, Math.max(0, melhor[1])) / 20) * (GRAF_BASE - GRAF_TOPO);
+    cursor.setAttribute("x1", px); cursor.setAttribute("x2", px);
+    ponto.setAttribute("cx", px); ponto.setAttribute("cy", py);
+
+    const q = new Date(melhor[0] * 1000);
+    const hh = `${String(q.getHours()).padStart(2, "0")}:${String(q.getMinutes()).padStart(2, "0")}`;
+    tip.innerHTML = `<span class="quando">${hh}</span>`
+      + `<b>${melhor[1].toFixed(1)}</b> TPS`
+      + (melhor[2] != null ? ` · <b>${melhor[2].toFixed(1)}</b> ms` : "")
+      + `<br>${melhor[3]} ${melhor[3] === 1 ? "jogador" : "jogadores"}`;
+
+    // não deixa o balão sair da caixa
+    const meio = (px / GRAF_W) * svgR.width + (svgR.left - r.left);
+    const largura = tip.offsetWidth || 120;
+    tip.style.left = `${Math.min(r.width - largura - 8, Math.max(8, meio - largura / 2))}px`;
+    tip.style.top = `${Math.max(6, (py / GRAF_H) * svgR.height - 12)}px`;
+  });
+
+  $("graf-abas").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-horas]");
+    if (!t) return;
+    grafHoras = Number(t.dataset.horas);
+    $("graf-abas").querySelectorAll(".subtab").forEach((s) => s.classList.toggle("active", s === t));
+    loadGrafico();
+  });
+
+  async function loadGrafico() {
+    try {
+      const r = await api(`/tps/historico?horas=${grafHoras}`);
+      grafPontos = r.pontos || [];
+      desenharGrafico();
+    } catch (err) {
+      grafPontos = [];
+      desenharGrafico();
+      $("graf-info").textContent = err.message;
+    }
+  }
+
+  /* ---------------- backup automático ---------------- */
+
+  const DIAS_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  let bkaSujo = false;   // formulário mexido: o polling não sobrescreve
+  let bkaDados = null;
+
+  $("bka-dias").innerHTML = DIAS_CURTO
+    .map((d, i) => `<button class="ag-dia" data-dia="${i}" aria-pressed="false">${d}</button>`).join("");
+
+  const bkaForm = () => ({
+    hora: $("bka-hora").value || "04:00",
+    dias: [...$("bka-dias").querySelectorAll(".ag-dia.on")].map((b) => Number(b.dataset.dia)),
+    manter: Math.min(30, Math.max(1, Number($("bka-manter").value) || 7)),
+  });
+
+  function bkaSujar() { bkaSujo = true; $("bka-salvar").disabled = false; }
+
+  $("bka-hora").addEventListener("input", bkaSujar);
+  $("bka-manter").addEventListener("input", bkaSujar);
+  $("bka-dias").addEventListener("click", (e) => {
+    const b = e.target.closest(".ag-dia");
+    if (!b) return;
+    b.classList.toggle("on");
+    b.setAttribute("aria-pressed", String(b.classList.contains("on")));
+    bkaSujar();
+  });
+
+  function renderBackupAuto(s) {
+    bkaDados = s;
+    $("bka-indisponivel").style.display = s.disponivel ? "none" : "";
+    $("bka-corpo").style.display = s.disponivel ? "" : "none";
+
+    $("bka-estado").textContent = s.ativo ? "ligado" : "desligado";
+    $("bka-ativo").classList.toggle("on", s.ativo);
+    $("bka-ativo").setAttribute("aria-checked", String(s.ativo));
+
+    if (!bkaSujo) {
+      $("bka-hora").value = s.hora;
+      $("bka-manter").value = s.manter;
+      $("bka-dias").querySelectorAll(".ag-dia").forEach((b) => {
+        const on = s.dias.includes(Number(b.dataset.dia));
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      $("bka-salvar").disabled = true;
+    }
+
+    const p = $("bka-proximo");
+    if (s.rodando) {
+      p.className = "ag-proximo";
+      p.textContent = "Fazendo backup agora…";
+    } else if (s.ativo && s.proximoEm) {
+      p.className = "ag-proximo";
+      p.textContent = `Próximo backup: ${quandoFalta(s.proximoEm)}`;
+    } else {
+      p.className = "ag-proximo off";
+      p.textContent = "Backup automático desligado";
+    }
+
+    // o último resultado é o que diz se dá para confiar no automático
+    const u = s.ultimo;
+    $("bka-hint").innerHTML = !u
+      ? "Nenhum backup automático ainda."
+      : u.ok
+        ? `Último: <span class="mono">${esc(u.arquivo)}</span> · ${bytes(u.bytes)}`
+          + `${u.segundos ? ` em ${u.segundos}s` : ""} · ${quando(new Date(u.em).getTime())}`
+        : `<span style="color:var(--red)">Falhou ${quando(new Date(u.em).getTime())}: ${esc(u.erro || "erro")}</span>`;
+
+    $("bka-agora").disabled = s.rodando || !s.disponivel;
+    $("bka-agora").textContent = s.rodando ? "fazendo…" : "Fazer agora";
+  }
+
+  function renderBackupArquivos(arquivos) {
+    const el = $("bka-lista");
+    if (!arquivos.length) {
+      el.innerHTML = `<div class="empty" style="padding:20px">Nenhuma cópia guardada ainda.</div>`;
+      return;
+    }
+    const total = arquivos.reduce((s, a) => s + a.bytes, 0);
+    const livre = bkaDados?.livreEmDisco;
+    const auto = arquivos.filter((a) => a.automatico).length;
+    const manuais = arquivos.length - auto;
+    // separa as duas contagens: o painel só gira as automáticas, e misturar
+    // faria parecer que a cópia manual conta para o limite de "guardar N"
+    const quantas = `${auto} ${auto === 1 ? "cópia automática" : "cópias automáticas"}`
+      + (manuais ? ` + ${manuais} à mão` : "");
+    el.innerHTML = `<div class="hint" style="margin:0 0 4px">
+        ${quantas} · ${bytes(total)} em disco${livre ? ` · ${bytes(livre)} livres` : ""}
+      </div>`
+      + arquivos.map((a) => `
+        <div class="bka-row${a.automatico ? "" : " manual"}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="${a.automatico ? "var(--grass)" : "var(--faint)"}" stroke-width="1.8">
+            <path d="M20 7v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9z"/><path d="M13 4v4h6"/></svg>
+          <div class="bki">
+            <div class="bkn">${esc(a.nome)}</div>
+            <div class="bkm">${bytes(a.bytes)} · ${quando(new Date(a.em).getTime())}${a.automatico ? "" : " · feito à mão, fora da rotação"}</div>
+          </div>
+          <div class="bka-acts">
+            <button class="mini" data-bkbaixar="${esc(a.nome)}">Baixar</button>
+            ${a.automatico ? `<button class="mini ban" data-bkapagar="${esc(a.nome)}">Apagar</button>` : ""}
+          </div>
+        </div>`).join("");
+  }
+
+  async function loadBackupAuto() {
+    try {
+      const [s, arq] = await Promise.all([api("/backup/auto"), api("/backup/arquivos")]);
+      renderBackupAuto(s);
+      renderBackupArquivos(arq.arquivos || []);
+    } catch (err) {
+      $("bka-hint").textContent = err.message;
+    }
+  }
+
+  $("bka-ativo").onclick = async () => {
+    try {
+      renderBackupAuto(await put("/backup/auto", { ativo: !bkaDados?.ativo }));
+      toast(bkaDados.ativo ? "backup automático ligado" : "backup automático desligado");
+    } catch (err) { toast(err.message, true); }
+  };
+  $("bka-ativo").addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); $("bka-ativo").click(); }
+  });
+
+  $("bka-salvar").onclick = async () => {
+    try {
+      const s = await put("/backup/auto", bkaForm());
+      bkaSujo = false;
+      renderBackupAuto(s);
+      toast("backup automático salvo");
+    } catch (err) { toast(err.message, true); }
+  };
+
+  $("bka-agora").onclick = async () => {
+    const n = bkaDados?.hojeJaTem
+      ? "Já existe um backup de hoje — ele será substituído. "
+      : "";
+    if (!await confirmarCom("BACKUP", {
+      title: "Fazer backup agora",
+      text: `${n}O mundo para de gravar durante o pacote e volta sozinho no fim. `
+        + `Dá para jogar enquanto roda; o que acontecer no meio entra só no próximo.`,
+      confirm: "Fazer backup",
+    })) return;
+
+    const btn = $("bka-agora");
+    btn.disabled = true; btn.textContent = "fazendo…";
+    try {
+      const s = await post("/backup/auto/agora");
+      renderBackupAuto(s);
+      if (s.ultimo?.ok) toast(`backup pronto: ${s.ultimo.arquivo} (${bytes(s.ultimo.bytes)})`);
+      else toast(s.ultimo?.erro || "o backup não deu certo", true);
+      await loadBackupAuto();
+    } catch (err) {
+      toast(err.message, true);
+      btn.disabled = false; btn.textContent = "Fazer agora";
+    }
+  };
+
+  $("bka-lista").addEventListener("click", async (e) => {
+    const baixar = e.target.closest("[data-bkbaixar]");
+    if (baixar) {
+      const nome = baixar.dataset.bkbaixar;
+      try {
+        const { ticket } = await post(`/backup/arquivos/${encodeURIComponent(nome)}/ticket`);
+        location.href = `${API}/backup/arquivos/${encodeURIComponent(nome)}?ticket=${encodeURIComponent(ticket)}`;
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    const apagar = e.target.closest("[data-bkapagar]");
+    if (!apagar) return;
+    const nome = apagar.dataset.bkapagar;
+    if (!await confirmarCom("APAGAR", {
+      title: `Apagar ${nome}`,
+      text: "Esta cópia some do disco e não tem como desfazer pelo painel.",
+      confirm: "Apagar",
+    })) return;
+    try {
+      await del(`/backup/arquivos/${encodeURIComponent(nome)}`);
+      toast(`${nome} apagado`);
+      await loadBackupAuto();
+    } catch (err) { toast(err.message, true); }
+  });
 
   /* ---------------- restaurar o mundo ---------------- */
 
@@ -2996,6 +3549,9 @@
       if ($("mods").classList.contains("active")) loadMods();
     }
     st = data;
+    // antes dos renders: num servidor Paper a aba lateral já nasce "Plugins", em
+    // vez de virar quando alguém abre a aba pela primeira vez
+    definirTermos(data.server.plataforma);
     renderTop(); renderCounts(); renderPlayers(); renderBans(); renderWL();
     renderHost(); renderTps(); renderPower(); renderAgenda();
     if (data.console.lines.length || first) appendLines(data.console.lines, first);
@@ -3049,6 +3605,7 @@
     chatHist = []; chatVivo = []; chatBase = -1;
     ticks = 0;
     agSujo = false; // a agenda é de cada servidor: edição pela metade não atravessa a troca
+    bkaSujo = false; grafPontos = [];
     // a pasta de mods é de cada servidor: invalida pra não mostrar a lista do anterior
     modsCarregado = false; modsDados = null;
     $("nav-mcount").textContent = "";
@@ -3063,7 +3620,7 @@
     usarServidor(id);
     await recomecar();
     // o que carrega sob demanda não vem no /state: refaz pro servidor novo
-    if ($("servidor").classList.contains("active")) { loadBackupInfo(); loadGuardados(); }
+    if ($("servidor").classList.contains("active")) { loadBackupInfo(); loadGuardados(); loadGrafico(); loadBackupAuto(); }
     if ($("chat").classList.contains("active")) loadChat();
     if ($("mods").classList.contains("active")) loadMods();
     if (histVisivel()) loadHistory();
@@ -3164,7 +3721,8 @@
     await act(() => post("/whitelist/toggle", { on: ligando }), ligando ? "whitelist ligada" : "whitelist desligada");
   };
 
-  // popula a lista com quem já jogou — com online-mode ligado, nick pirata é recusado pela Mojang
+  // popula a lista com quem já jogou — com online-mode ligado, nick pirata é recusado pela Mojang;
+  // em offline-mode entra qualquer nick, e é por isso que o aviso muda junto
   $("wl-fill").onclick = async () => {
     await loadHistory();
     const faltando = hist.map((p) => p.nick).filter((n) => !st.whitelist.includes(n));
@@ -3172,7 +3730,8 @@
     const ok = await ask({
       title: "Adicionar quem já jogou",
       label: "digite OK para confirmar",
-      text: `${faltando.length} nick(s) entram na lista: ${faltando.join(", ")}. Contas não originais são recusadas pelo servidor.`,
+      text: `${faltando.length} nick(s) entram na lista: ${faltando.join(", ")}.`
+        + (st.server.onlineMode === false ? "" : " Contas não originais são recusadas pelo servidor."),
       placeholder: "OK",
       confirm: "Adicionar",
     });
@@ -3254,7 +3813,7 @@
     // quem rola é o .content, não a janela — o scrollTo(0,0) de antes não fazia nada
     document.querySelector(".content").scrollTop = 0;
     if (autoscroll) TERMS.forEach((id) => { const e = $(id); if (e) e.scrollTop = e.scrollHeight; });
-    if (view === "servidor") { loadBackupInfo(); loadGuardados(); }
+    if (view === "servidor") { loadBackupInfo(); loadGuardados(); loadGrafico(); loadBackupAuto(); }
     if (view === "chat") loadChat();
     if (view === "mods") loadMods();
     if (view === "jogadores" && histVisivel()) loadHistory();

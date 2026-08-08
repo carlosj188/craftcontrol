@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { erro400, erroHttp } from "./erros.js";
+import { chaveDia, proximaOcorrencia, validarHora, validarDias, atrasadaDemais, TOLERANCIA_MS } from "./quando.js";
+
 /**
  * Reinício automático.
  *
@@ -15,7 +18,7 @@ import path from "node:path";
  */
 
 const INTERVALO_MS = 20_000;
-const ADIAR_MS = 5 * 60_000; // backup ou restauração em andamento: tenta de novo depois
+const ADIAR_MS = TOLERANCIA_MS; // backup ou restauração em andamento: tenta de novo depois
 
 const PADRAO = {
   ativo: false,
@@ -25,22 +28,12 @@ const PADRAO = {
   pularSeTiverGente: false,
 };
 
-const dois = (n) => String(n).padStart(2, "0");
-const chaveDia = (d) => `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
-
 function validar(bruto) {
   const cfg = { ...PADRAO };
   if (typeof bruto?.ativo === "boolean") cfg.ativo = bruto.ativo;
   if (typeof bruto?.pularSeTiverGente === "boolean") cfg.pularSeTiverGente = bruto.pularSeTiverGente;
-
-  if (typeof bruto?.hora === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(bruto.hora)) cfg.hora = bruto.hora;
-  else if (bruto?.hora !== undefined) throw Object.assign(new Error("horário inválido — use HH:MM"), { statusCode: 400 });
-
-  if (Array.isArray(bruto?.dias)) {
-    const dias = [...new Set(bruto.dias.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
-    if (!dias.length) throw Object.assign(new Error("escolha pelo menos um dia da semana"), { statusCode: 400 });
-    cfg.dias = dias;
-  }
+  cfg.hora = validarHora(bruto?.hora, cfg.hora);
+  cfg.dias = validarDias(bruto?.dias, cfg.dias);
 
   if (Array.isArray(bruto?.avisosMin)) {
     cfg.avisosMin = [...new Set(bruto.avisosMin.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 60))]
@@ -81,29 +74,14 @@ export function criar({ dados, docker, run, log, estadoServidor, backup, restore
       fs.renameSync(tmp, ARQUIVO); // troca atômica: nunca deixa um json pela metade
     } catch (err) {
       log?.("err", `não consegui gravar a agenda: ${err.message}`);
-      throw Object.assign(new Error(`não consegui gravar a agenda: ${err.message}`), { statusCode: 500 });
+      throw erroHttp(500, `não consegui gravar a agenda: ${err.message}`);
     }
   }
 
   /* ---------------- quando é a próxima ---------------- */
 
-  function proxima(desde = new Date()) {
-    if (!cfg.ativo) return null;
-    const [h, m] = cfg.hora.split(":").map(Number);
-    for (let i = 0; i <= 8; i++) {
-      const d = new Date(desde);
-      d.setDate(d.getDate() + i);
-      d.setHours(h, m, 0, 0);
-      if (d <= desde) continue;
-      if (!cfg.dias.includes(d.getDay())) continue;
-      if (puladoEm === chaveDia(d)) continue;
-      return d;
-    }
-    return null;
-  }
-
   function recalcular() {
-    alvo = proxima();
+    alvo = proximaOcorrencia(cfg, new Date(), puladoEm);
     // avisos cuja janela já passou entram como "dados": ligar a agenda 2 min antes do
     // horário não pode fazer o chat anunciar "reinício em 15 minutos" na mesma hora
     avisados = new Set(alvo ? cfg.avisosMin.filter((min) => alvo.getTime() - Date.now() <= min * 60_000) : []);
@@ -162,7 +140,7 @@ export function criar({ dados, docker, run, log, estadoServidor, backup, restore
     if (adiadoAte && Date.now() < adiadoAte) return;
 
     // atrasou demais (painel fora do ar, máquina suspensa): não reinicia fora de hora
-    if (faltam < -ADIAR_MS && !adiadoAte) {
+    if (atrasadaDemais(alvo) && !adiadoAte) {
       log?.("warn", `reinício automático de ${alvo.toLocaleString("pt-BR")} não aconteceu (painel fora do ar) — pulando`);
       recalcular();
       return;
@@ -201,7 +179,7 @@ export function criar({ dados, docker, run, log, estadoServidor, backup, restore
 
   /** Cancela só a próxima ocorrência, sem desligar a agenda. */
   function pularProxima() {
-    if (!alvo) throw Object.assign(new Error("não há reinício agendado para cancelar"), { statusCode: 400 });
+    if (!alvo) throw erro400("não há reinício agendado para cancelar");
     puladoEm = chaveDia(alvo);
     salvar();
     const era = alvo;

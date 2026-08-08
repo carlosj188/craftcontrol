@@ -1,7 +1,8 @@
 # CraftControl
 
-Painel web para administrar um servidor Minecraft **Fabric, Forge ou NeoForge** —
-jogadores, console, chat, backup, mods e energia — sem abrir SSH.
+Painel web para administrar um servidor Minecraft **Fabric, Forge, NeoForge,
+Paper, Purpur, Spigot ou Folia** — jogadores, console, chat, backup, mods (ou
+plugins) e energia — sem abrir SSH.
 
 Feito para servidor caseiro rodando em Docker. Um contêiner, sem banco de dados,
 sem build de frontend.
@@ -21,14 +22,20 @@ Dá para falar no chat e mandar comando pelo painel.
 
 **Moderação** — banir, expulsar, perdoar e gerenciar a whitelist.
 
-**Mods** — a parte mais completa:
+**Mods e plugins** — a parte mais completa. O painel descobre sozinho com qual
+servidor está falando: em Fabric, Forge e NeoForge ele cuida da pasta `mods/`; em
+Paper, Purpur, Spigot e Folia, da pasta `plugins/`. A aba muda de nome junto, e o
+resto funciona igual:
 
 - lista o que está instalado com o **nome e a versão de verdade**, lidos de dentro
   do `.jar` (não do nome do arquivo);
 - avisa quais têm **versão mais nova compatível** e atualiza com um clique;
 - **instala do Modrinth** pela busca, já filtrada pelo seu carregador e versão;
 - aceita **upload de `.jar`**, e **recusa o que não serve** explicando o porquê
-  ("é um mod de Forge e este servidor é Fabric", "foi publicado para 1.20.1");
+  ("é um mod de Forge e este servidor é Fabric", "foi publicado para 1.20.1",
+  "não declara suporte a Folia");
+- entende que **plugin de Bukkit roda em Spigot, Paper e Purpur** — a herança da
+  família, que decide o que o catálogo pode oferecer;
 - **ativa e desativa** sem apagar nada;
 - avisa quem quebra antes de você desativar algo ("29 mods dependem deste");
 - e a rede de segurança: ao aplicar, o painel reinicia, **vigia o boot** e, se o
@@ -75,8 +82,8 @@ seu servidor. Aí `MC_HOST` é o nome do serviço dele (`mc`, no exemplo) e
 
 | | |
 | --- | --- |
-| Servidor | Fabric, Forge ou NeoForge em Docker, com RCON ligado |
-| Dados | a pasta com `world/`, `mods/` e `logs/`, montada com **escrita** |
+| Servidor | Fabric, Forge, NeoForge, Paper, Purpur, Spigot ou Folia em Docker, com RCON ligado |
+| Dados | a pasta com `world/`, `mods/` (ou `plugins/`) e `logs/`, montada com **escrita** |
 | Dono da pasta | uid **1000** — é como o painel escreve sem root (`chown -R 1000:1000`) |
 | Energia | opcional; usa um socket-proxy com allowlist, nunca o socket do Docker direto |
 

@@ -31,6 +31,7 @@ services:
           "rconPorta":${MC_RCON_PORT:-25575},
           "senhaEnv":"RCON_PASSWORD",
           "dados":"/mcdata",
+          "backups":"/backups",
           "container":"${MC_CONTAINER:-minecraft}"}]
 
       # Liga/desliga/reinicia pelo painel, via socket-proxy (nunca o socket direto).
@@ -44,6 +45,10 @@ services:
       # A pasta de dados do seu servidor (a que tem world/, mods/, logs/).
       # Precisa ser LEITURA E ESCRITA: instalar mod e restaurar mundo escrevem aqui.
       - ${MC_DATA:-./data}:/mcdata
+
+      # Onde o backup automático grava. Fica FORA da pasta de dados de propósito:
+      # não infla o data/, e sobrevive a uma restauração do mundo.
+      - ${BACKUP_DIR:-./backups}:/backups
 
     ports:
       - "${PANEL_PORT:-8095}:8095"

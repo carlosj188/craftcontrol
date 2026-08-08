@@ -3,14 +3,15 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { Readable } from "node:stream";
 
-import { identificar, escolherPerfil, PREFERENCIA } from "./modmeta.js";
+import { identificar, escolherPerfil, cascata, usaPlugins, PREFERENCIA } from "./modmeta.js";
 import { avaliar } from "./compat.js";
 import { erro400, erro404, erro409, erro422, erro429 } from "./erros.js";
 
 /**
  * Mods de um servidor: listar, ativar/desativar, remover, instalar e atualizar.
  *
- * Lista o que está em `<dados>/mods` e `<dados>/mods-off`, abre cada .jar para
+ * Lista o que está em `<dados>/mods` e `<dados>/mods-off` — ou em `plugins/` e
+ * `plugins-off/`, quando o servidor é da família Bukkit —, abre cada .jar para
  * saber quem ele é de verdade (nome e versão do arquivo raramente batem com o
  * mod) e, se estiver ligado, pergunta ao Modrinth pelo SHA1 de cada um: dá o
  * nome bonito, a página, se roda no servidor e se existe versão mais nova.
@@ -63,10 +64,17 @@ async function pedir(caminho, corpo) {
 /** Divide em blocos para não montar URL gigante nem payload fora do limite deles. */
 const emBlocos = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
-/** Busca no catálogo, já cercada pelo carregador e pela versão deste servidor. */
+/**
+ * Busca no catálogo, já cercada pelo carregador e pela versão deste servidor.
+ *
+ * As facetas do Modrinth são um E de OUs: a lista externa exige todas, e cada
+ * lista interna aceita qualquer uma. É o que permite pedir de uma vez tudo que
+ * um Purpur roda — plugin de Purpur, de Paper, de Spigot ou de Bukkit.
+ */
 export async function buscar({ termo, carregador, versaoJogo, limite = 20 }) {
-  const facetas = [["project_type:mod"]];
-  if (carregador) facetas.push([`categories:${carregador}`]);
+  const plugin = usaPlugins(carregador);
+  const facetas = [[`project_type:${plugin ? "plugin" : "mod"}`]];
+  if (carregador) facetas.push(cascata(carregador).map((c) => `categories:${c}`));
   if (versaoJogo) facetas.push([`versions:${versaoJogo}`]);
   const q = new URLSearchParams({
     query: termo || "",
@@ -90,7 +98,9 @@ export async function buscar({ termo, carregador, versaoJogo, limite = 20 }) {
 /** A versão mais recente de um projeto que serve este servidor. */
 export async function versaoParaInstalar({ projeto, carregador, versaoJogo }) {
   const q = new URLSearchParams();
-  if (carregador) q.set("loaders", JSON.stringify([carregador]));
+  // a cascata em vez do carregador só: o plugin que este servidor precisa pode
+  // estar publicado como "spigot" e rodar num Purpur sem nenhum problema
+  if (carregador) q.set("loaders", JSON.stringify(cascata(carregador)));
   if (versaoJogo) q.set("game_versions", JSON.stringify([versaoJogo]));
   const versoes = await pedir(`/project/${encodeURIComponent(projeto)}/version?${q}`);
   if (!versoes?.length) return null;
@@ -126,7 +136,7 @@ async function consultarModrinth(hashes, carregador, versaoJogo) {
     pedir("/version_files", { hashes, algorithm: "sha1" }),
     carregador && versaoJogo
       ? pedir("/version_files/update", {
-          hashes, algorithm: "sha1", loaders: [carregador], game_versions: [versaoJogo],
+          hashes, algorithm: "sha1", loaders: cascata(carregador), game_versions: [versaoJogo],
         }).catch(() => ({}))
       : Promise.resolve({}),
   ]);
@@ -149,16 +159,7 @@ async function consultarModrinth(hashes, carregador, versaoJogo) {
 
 /* ---------------- um servidor ---------------- */
 
-export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
-  const PASTA = path.join(dados, "mods");
-  // Fica dentro do volume de propósito: o painel só enxerga `<dados>`, então uma
-  // pasta de desativados fora dele seria invisível.
-  // O servidor não lê esta pasta — é exatamente isso que "desativado" significa.
-  const OFF = path.join(dados, "mods-off");
-  // Nada é apagado na hora: remover e atualizar largam o jar velho aqui, e a lixeira
-  // só é esvaziada quando um boot saudável confirma que a mudança prestou. É o que
-  // permite desfazer tudo automaticamente se o servidor não subir.
-  const LIXO = path.join(dados, "mods-lixo");
+export function criar({ dados, versao, iniciadoEm, plataforma = () => null, ocupado = () => false }) {
   const PENDENTE = path.join(dados, "mcpanel", "mods-pendente.json");
 
   /** "on:"/"off:"+arquivo -> { mtimeMs, size, sha1, lido } */
@@ -166,8 +167,39 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
   /** resultado do Modrinth, guardado por assinatura do acervo */
   let online = { assinatura: null, em: 0, dados: null, erro: null };
   let rodando = null;
+  let familia = null;
+  let dirs = null;
 
-  const existe = () => { try { return fs.statSync(PASTA).isDirectory(); } catch { return false; } };
+  /**
+   * As três pastas desta família: Fabric e Forge leem `mods/`, e Paper, Purpur,
+   * Spigot e Folia leem `plugins/`.
+   *
+   * Reavaliadas a cada uso em vez de fixadas na criação porque, quando o painel
+   * sobe antes do primeiro boot do servidor, não existe log para consultar e a
+   * plataforma ainda é desconhecida. Fixar aqui deixaria o painel olhando a pasta
+   * errada até alguém reiniciá-lo.
+   */
+  function pastas() {
+    const nova = usaPlugins(plataforma()) ? "plugins" : "mods";
+    if (nova !== familia) {
+      familia = nova;
+      dirs = {
+        // Ficam dentro do volume de propósito: o painel só enxerga `<dados>`, então
+        // uma pasta de desativados fora dele seria invisível. O servidor não lê a
+        // `-off` — é exatamente isso que "desativado" significa.
+        PASTA: path.join(dados, nova),
+        OFF: path.join(dados, `${nova}-off`),
+        // Nada é apagado na hora: remover e atualizar largam o jar velho aqui, e a
+        // lixeira só é esvaziada quando um boot saudável confirma que a mudança
+        // prestou. É o que permite desfazer tudo sozinho se o servidor não subir.
+        LIXO: path.join(dados, `${nova}-lixo`),
+      };
+      cache.clear(); // as chaves são por nome de arquivo, e o acervo inteiro mudou
+    }
+    return dirs;
+  }
+
+  const existe = () => { try { return fs.statSync(pastas().PASTA).isDirectory(); } catch { return false; } };
   const carimboBoot = () => iniciadoEm() || null;
   /** Tira um nome do cache de jars — dos dois lados, porque rename não muda mtime. */
   const esquecer = (n) => { cache.delete("on:" + n); cache.delete("off:" + n); };
@@ -193,6 +225,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
     };
     // a chave do cache leva a pasta: o mesmo nome existe dos dois lados durante
     // a vida de um mod, e trocar de pasta não muda mtime nem tamanho
+    const { PASTA, OFF } = pastas();
     const alvos = [
       ...listar(PASTA).map((n) => ({ nome: n, dir: PASTA, ativo: true })),
       ...listar(OFF).map((n) => ({ nome: n, dir: OFF, ativo: false })),
@@ -226,12 +259,21 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
   /**
    * Qual carregador este servidor usa.
    *
-   * Só conta jar que declara **um** carregador: os multi-loader (fabric + forge +
-   * neoforge no mesmo arquivo, comum em mod publicado pelo Modrinth) servem a
-   * todos e por isso não são pista de nada — deixá-los votar faria uma pasta
-   * Fabric parecer NeoForge só porque os jars genéricos estavam em maioria.
+   * Na família Bukkit quem responde é o servidor, não os jars: um `plugin.yml`
+   * não diz se está num Paper ou num Purpur — diz só que é um plugin. Como a
+   * diferença entre eles decide quais versões o Modrinth vai oferecer, a resposta
+   * vem do log, via `plataforma()`.
+   *
+   * Fora dela, a pista são os próprios jars, e só conta jar que declara **um**
+   * carregador: os multi-loader (fabric + forge + neoforge no mesmo arquivo,
+   * comum em mod publicado pelo Modrinth) servem a todos e por isso não são pista
+   * de nada — deixá-los votar faria uma pasta Fabric parecer NeoForge só porque
+   * os jars genéricos estavam em maioria.
    */
   function carregadorDominante(lista) {
+    const doServidor = plataforma();
+    if (usaPlugins(doServidor)) return doServidor;
+
     const conta = {};
     for (const m of lista) {
       const cs = m.lido.carregadores;
@@ -408,6 +450,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
 
   function mover(arquivo, paraAtivo, { anotar = true } = {}) {
     if (anotar) exigirLivre();
+    const { PASTA, OFF } = pastas();
     const origem = caminhoSeguro(paraAtivo ? OFF : PASTA, arquivo);
     const destino = caminhoSeguro(paraAtivo ? PASTA : OFF, arquivo);
     if (!fs.existsSync(origem)) throw erro404(`${arquivo} não está ${paraAtivo ? "desativado" : "ativo"}`);
@@ -423,6 +466,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
 
   /** Tira o jar de circulação mandando para a lixeira; devolve de onde ele saiu. */
   function paraLixeira(arquivo) {
+    const { PASTA, OFF, LIXO } = pastas();
     let estava = null;
     for (const [dir, marca] of [[PASTA, "ativo"], [OFF, "off"]]) {
       if (fs.existsSync(caminhoSeguro(dir, arquivo))) { estava = marca; break; }
@@ -440,6 +484,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
 
   /** Traz de volta da lixeira. */
   function daLixeira(arquivo, ativo) {
+    const { PASTA, OFF, LIXO } = pastas();
     const origem = caminhoSeguro(LIXO, arquivo);
     if (!fs.existsSync(origem)) throw erro404(`${arquivo} não está mais na lixeira`);
     const destino = caminhoSeguro(ativo ? PASTA : OFF, arquivo);
@@ -462,6 +507,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
    * `desfazer` — quem aplica chama um dos dois, nunca meia cerimônia de cada.
    */
   function confirmar() {
+    const { LIXO } = pastas();
     let n = 0;
     try {
       for (const f of fs.readdirSync(LIXO)) {
@@ -583,6 +629,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
    */
   async function acomodar(recebido, { forcar = false, catalogo = null, alvo = null } = {}) {
     alvo = alvo || await alvoAtual();
+    const { PASTA, OFF } = pastas();
     const destinoNome = recebido.nome;
     caminhoSeguro(PASTA, destinoNome); // recusa nome vindo do cliente ou do catálogo
 
@@ -624,7 +671,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
   /** Upload manual: o corpo da requisição é o .jar cru. */
   async function enviar(stream, nomeArquivo, { forcar = false } = {}) {
     exigirLivre();
-    caminhoSeguro(PASTA, nomeArquivo); // valida antes de gastar disco
+    caminhoSeguro(pastas().PASTA, nomeArquivo); // valida antes de gastar disco
     const recebido = await receber(stream, nomeArquivo);
     // o catálogo pode conhecer este arquivo pelo hash, e aí o veredito fica exato
     let catalogo = null;
@@ -694,6 +741,7 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
     }
 
     const estava = paraLixeira(nomeArquivo);          // o antigo sai, mas fica guardado
+    const { PASTA, OFF } = pastas();
     assentar(recebido.tmp, estava === "off" ? OFF : PASTA, v.arquivo);
     anotarPendencia("atualizou", v.arquivo, { de: nomeArquivo, estava });
 
@@ -730,8 +778,9 @@ export function criar({ dados, versao, iniciadoEm, ocupado = () => false }) {
   }
 
   return {
-    pasta: PASTA,
-    pastaDesativados: OFF,
+    // funções, e não valores: a família só é conhecida depois do primeiro boot
+    pasta: () => pastas().PASTA,
+    pastaDesativados: () => pastas().OFF,
     listar,
     buscar: (termo) => listar().then((d) =>
       buscar({ termo, carregador: d.carregador, versaoJogo: d.versaoJogo })),

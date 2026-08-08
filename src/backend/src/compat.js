@@ -1,12 +1,16 @@
+import { cascata, usaPlugins } from "./modmeta.js";
+
 /**
  * Este mod serve neste servidor?
  *
- * Duas perguntas: o carregador bate, e a versão do Minecraft bate. A primeira é
- * um `includes`. A segunda é chata, porque cada carregador escreve o intervalo de
- * um jeito:
+ * Duas perguntas: o carregador bate, e a versão do Minecraft bate. A primeira
+ * seria um `includes` se não fosse a família Bukkit, onde os carregadores herdam
+ * uns dos outros — quem resolve isso é a `cascata()`. A segunda é chata, porque
+ * cada carregador escreve o intervalo de um jeito:
  *
  *   Fabric     ">=1.21 <1.22"   "~1.21"   "1.21.1"   "*"   ["1.21", "1.21.1"]
  *   Forge      "[1.21.1,1.22)"  "[1.21,)"                    (intervalo Maven)
+ *   Bukkit     `api-version: 1.13`  — um mínimo, e só (ver abaixo)
  *
  * Por isso a fonte preferida é o Modrinth, que devolve a lista literal de versões
  * suportadas — sem interpretação, sem chute. O intervalo declarado no jar é o
@@ -133,15 +137,33 @@ export function avaliar({ perfil, declarados, alvo, catalogo }) {
   const avisos = [];   // não impedem, mas o usuário precisa saber
   let incerto = false;
 
+  const plugin = usaPlugins(alvo.carregador);
+  const coisa = plugin ? "plugin" : "mod";
+
   /* ---- carregador ---- */
   const doJar = catalogo?.loaders?.length ? catalogo.loaders : declarados;
   if (alvo.carregador && doJar?.length) {
-    if (!doJar.includes(alvo.carregador)) {
-      motivos.push(`é um mod de ${doJar.join("/")} e este servidor é ${alvo.carregador}`);
+    // o servidor aceita o que ele é e tudo de que ele herda: um Purpur roda
+    // plugin publicado para Paper, Spigot ou Bukkit
+    const aceitos = cascata(alvo.carregador);
+    if (!doJar.some((c) => aceitos.includes(c))) {
+      motivos.push(`é um ${coisa} de ${doJar.join("/")} e este servidor é ${alvo.carregador}`);
     }
   } else if (!doJar?.length) {
     incerto = true;
-    avisos.push("não consegui ler os metadados do jar — pode não ser um mod");
+    avisos.push(`não consegui ler os metadados do jar — pode não ser um ${coisa}`);
+  }
+
+  /* ---- Folia ---- */
+  // O Folia se recusa a carregar plugin que não declare `folia-supported: true`,
+  // porque o modelo de threads dele quebra plugin escrito para servidor de uma
+  // thread só. É recusa na cara dura, e o painel consegue prever: quem sabe é o
+  // próprio jar. O catálogo tem a palavra final quando conhece o arquivo.
+  if (alvo.carregador === "folia" && doJar?.length) {
+    const noCatalogo = catalogo?.loaders?.includes("folia");
+    if (!noCatalogo && perfil && perfil.folia !== true) {
+      motivos.push("não declara suporte a Folia, e o Folia recusa plugin sem essa marca");
+    }
   }
 
   /* ---- versão do Minecraft ---- */
@@ -155,6 +177,16 @@ export function avaliar({ perfil, declarados, alvo, catalogo }) {
       const r = versaoNoIntervalo(perfil.mcRange, alvo.versaoJogo);
       if (r === false) motivos.push(`declara suportar ${perfil.mcRange} e este servidor é ${alvo.versaoJogo}`);
       else if (r === null) { incerto = true; avisos.push(`não sei interpretar "${perfil.mcRange}" como faixa de versão`); }
+    } else if (perfil?.mcMinimo) {
+      // `api-version` é piso, nunca teto: dizer 1.13 é dizer "não rodo antes de
+      // 1.13", e não "rodo em 1.21". Serve para reprovar, jamais para aprovar —
+      // aprovar por aqui carimbaria de compatível um plugin abandonado em 2019.
+      if (versaoNoIntervalo(`>=${perfil.mcMinimo}`, alvo.versaoJogo) === false) {
+        motivos.push(`exige ${perfil.mcMinimo} ou mais novo e este servidor é ${alvo.versaoJogo}`);
+      } else {
+        incerto = true;
+        avisos.push(`o jar só diz que precisa de ${perfil.mcMinimo} ou mais novo — plugin não declara versão máxima`);
+      }
     } else {
       incerto = true;
       avisos.push("o jar não diz para qual versão do Minecraft ele é");

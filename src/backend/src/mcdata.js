@@ -211,26 +211,76 @@ export function criar({ dados, versaoPadrao = null }) {
   }
 
   // o refresh chama isto a cada 5s: ler o log INTEIRO pra pegar uma linha do começo
-  // era o maior desperdício do painel. Lê só os primeiros 20 KB e cacheia por inode —
-  // a versão não muda enquanto o processo do servidor viver; rotação troca o inode.
-  let versionCache = { ino: null, v: null };
+  // era o maior desperdício do painel. Lê só os primeiros 20 KB e guarda o que leu —
+  // nada disso muda enquanto o processo do servidor viver; rotação troca o inode.
+  let cabecalhoCache = { ino: null, lidos: 0, txt: null };
 
+  /**
+   * Os primeiros 20 KB do log, onde o servidor se apresenta.
+   *
+   * O cache guarda **quanto** foi lido, e não só o inode, porque durante o boot o
+   * arquivo passa por todos os tamanhos: ler no primeiro segundo e cravar aquilo
+   * congelaria um cabeçalho de 2 KB em que o servidor ainda não tinha dito quem é
+   * — e o painel ficava sem versão e sem plataforma até o próximo reinício. Enquanto
+   * o log cresce, relê; ao completar o bloco, para.
+   */
+  function cabecalho() {
+    const st = fs.statSync(LOG);
+    const size = Math.min(st.size, 20000);
+    if (cabecalhoCache.ino === st.ino && cabecalhoCache.lidos >= size) return cabecalhoCache.txt;
+    const buf = Buffer.alloc(size);
+    const fd = fs.openSync(LOG, "r");
+    fs.readSync(fd, buf, 0, size, 0);
+    fs.closeSync(fd);
+    cabecalhoCache = { ino: st.ino, lidos: size, txt: buf.toString("utf8") };
+    return cabecalhoCache.txt;
+  }
+
+  /**
+   * A versão do Minecraft, tirada do começo do log.
+   *
+   * São dois padrões porque o "Starting minecraft server version" do vanilla, no
+   * Fabric, aparece **depois** de centenas de linhas de aviso dos mods — muito além
+   * dos 20 KB lidos aqui. Sem o segundo padrão, servidor Fabric só sabia a versão
+   * se alguém a escrevesse à mão no compose, e sem versão o Modrinth não tem como
+   * separar o que é atualização compatível.
+   */
   function version() {
     try {
-      const st = fs.statSync(LOG);
-      if (versionCache.ino === st.ino && versionCache.v) return versionCache.v;
-      const size = Math.min(st.size, 20000);
-      const buf = Buffer.alloc(size);
-      const fd = fs.openSync(LOG, "r");
-      fs.readSync(fd, buf, 0, size, 0);
-      fs.closeSync(fd);
-      const m = /Starting minecraft server version (\S+)/.exec(buf.toString("utf8"));
-      if (m) {
-        versionCache = { ino: st.ino, v: m[1] };
-        return m[1];
-      }
+      const txt = cabecalho();
+      const m = /Starting minecraft server version (\S+)/.exec(txt)
+        || /Loading Minecraft (\S+) with (?:Fabric|Quilt) Loader/.exec(txt);
+      if (m) return m[1];
     } catch { /* idem */ }
     return versaoPadrao;
+  }
+
+  /**
+   * Paper, Purpur, Folia, Spigot — ou `null` para Fabric, Forge e vanilla.
+   *
+   * Toda a família Bukkit se anuncia no boot com "This server is running X version",
+   * e é a única fonte que distingue um Purpur de um Paper: `server.properties` não
+   * diz, e a pasta `plugins/` só diz que a família é essa, não qual membro. Sem a
+   * distinção o painel ofereceria plugin de Purpur para um Paper, que não carrega.
+   *
+   * A pasta sozinha é o plano B, para o caso do log já ter rotacionado: ali dá para
+   * afirmar "é da família Bukkit", e `spigot` é o palpite conservador — está no meio
+   * da cascata, então nem promete o que Paper tem, nem recusa plugin de Bukkit.
+   */
+  function plataforma() {
+    try {
+      const m = /This server is running (\w+) version/i.exec(cabecalho());
+      if (m) {
+        const nome = m[1].toLowerCase();
+        if (["paper", "purpur", "folia", "spigot", "bukkit"].includes(nome)) return nome;
+        // derivado que não conhecemos (Pufferfish, Leaf…): é Paper por baixo
+        return "paper";
+      }
+    } catch { /* log ainda não existe */ }
+    try {
+      if (fs.readdirSync(path.join(DATA, "plugins")).some((f) => f.endsWith(".jar"))) return "spigot";
+    } catch { /* sem pasta de plugins: não é servidor de plugin */ }
+    return null;
   }
 
   /**
@@ -278,5 +328,5 @@ export function criar({ dados, versaoPadrao = null }) {
     }, intervalMs).unref();
   }
 
-  return { bans, whitelist, properties, startedAt, chatHistory, version, tail };
+  return { bans, whitelist, properties, startedAt, chatHistory, version, plataforma, tail };
 }

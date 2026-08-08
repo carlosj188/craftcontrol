@@ -1,16 +1,26 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
+
+import { erro409 } from "./erros.js";
 
 /**
- * Backup do mundo como download direto pro navegador: o painel roda
- * `save-off` + `save-all flush` no servidor, empacota `world/` num tar.gz que sai
- * pelo próprio corpo da resposta e devolve o `save-on` no fim, aconteça o que
- * acontecer. Nada fica guardado no disco do host.
+ * Backup do mundo: o painel roda `save-off` + `save-all flush` no servidor,
+ * empacota `world/` num tar.gz e devolve o `save-on` no fim, aconteça o que
+ * acontecer.
  *
- * O download é um GET direto (o navegador precisa gerenciar o arquivo), e GET
- * direto não carrega header de Authorization — por isso o fluxo é: POST autenticado
- * pega um ticket de uso único, o GET apresenta o ticket.
+ * O mesmo tar serve dois destinos:
+ *
+ * - **download** (`start`) — o stream sai pelo corpo da resposta e nada toca o
+ *   disco. É um GET direto porque o navegador precisa gerenciar o arquivo, e GET
+ *   não carrega header de Authorization: por isso um POST autenticado pega um
+ *   ticket de uso único e o GET apresenta o ticket.
+ * - **arquivo** (`paraArquivo`) — o mesmo stream vai para um `.part` no disco,
+ *   usado pelo backup automático. Ver `backupauto.js`.
+ *
+ * A trava `busy` é uma só para os dois: nunca há dois tar do mesmo mundo.
  */
 
 const TICKET_MS = 60_000;
@@ -74,7 +84,7 @@ export function criar({ dados, mundo = "world" }) {
    * o chamador amarra ele no fim da resposta E no abort do cliente.
    */
   async function start(run) {
-    if (busy) throw Object.assign(new Error("já existe um backup em andamento"), { statusCode: 409 });
+    if (busy) throw erro409("já existe um backup em andamento");
     busy = true;
 
     try {
@@ -107,5 +117,34 @@ export function criar({ dados, mundo = "world" }) {
     return { stream: child.stdout, done, stderrRef: () => stderr };
   }
 
-  return { issueTicket, useTicket, size, filename, start, isBusy: () => busy };
+  /**
+   * O mesmo backup, gravado em disco em vez de enviado ao navegador.
+   *
+   * Escreve num `.part` e só renomeia no fim: backup interrompido — tar que
+   * morreu, disco que encheu, painel que caiu — nunca se passa por um arquivo
+   * completo. Se falhar, o `.part` é removido e o `save-on` acontece de todo
+   * jeito, porque `done()` está no `finally`.
+   *
+   * @returns {{ arquivo: string, bytes: number }}
+   */
+  async function paraArquivo(run, destino) {
+    const parcial = `${destino}.part`;
+    const { stream, done, stderrRef } = await start(run);
+    try {
+      fs.mkdirSync(path.dirname(destino), { recursive: true });
+      await pipeline(stream, fs.createWriteStream(parcial));
+      const { size: bytes } = fs.statSync(parcial);
+      if (!bytes) throw new Error(`o tar não gerou nada${stderrRef() ? `: ${stderrRef().slice(0, 200)}` : ""}`);
+      fs.renameSync(parcial, destino);
+      return { arquivo: path.basename(destino), bytes };
+    } catch (err) {
+      try { fs.unlinkSync(parcial); } catch { /* já não existia */ }
+      const detalhe = stderrRef().trim();
+      throw new Error(detalhe ? `${err.message} — ${detalhe.slice(0, 200)}` : err.message);
+    } finally {
+      await done();
+    }
+  }
+
+  return { issueTicket, useTicket, size, filename, start, paraArquivo, isBusy: () => busy };
 }

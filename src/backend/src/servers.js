@@ -8,6 +8,8 @@ import * as tpsMod from "./tps.js";
 import * as agendaMod from "./agenda.js";
 import * as modsMod from "./mods.js";
 import * as aplicarMod from "./aplicar.js";
+import * as backupAutoMod from "./backupauto.js";
+import * as tpsHistMod from "./tpshist.js";
 
 /**
  * Um painel, vários servidores.
@@ -64,6 +66,7 @@ function lerConfig() {
       senha,
       dados: String(s.dados),
       mundo: String(s.mundo || "world"),
+      backups: s.backups ? String(s.backups) : null,
       container: s.container ? String(s.container) : null,
       versaoPadrao: s.versao ? String(s.versao) : null,
     };
@@ -81,6 +84,7 @@ function legado() {
     senha: process.env.RCON_PASSWORD || "",
     dados: process.env.MC_DATA || "/mcdata",
     mundo: process.env.MC_WORLD || "world",
+    backups: process.env.MC_BACKUPS || null,
     container: process.env.MC_CONTAINER || "minecraft",
     versaoPadrao: process.env.MC_VERSION || null,
   };
@@ -137,7 +141,9 @@ function criarServidor(cfg) {
     bans: [],
     whitelist: [],
     whitelistEnabled: false,
+    onlineMode: true,
     version: null,
+    plataforma: null,
     startedAt: null,
     error: null,
   };
@@ -169,8 +175,12 @@ function criarServidor(cfg) {
     state.bans = mc.bans();
     state.whitelist = mc.whitelist();
     state.whitelistEnabled = props["white-list"] === "true";
+    // com o servidor em offline-mode a whitelist funciona igual, mas passa a ser
+    // por nome: o painel precisa saber para não prometer o que ela não entrega
+    state.onlineMode = props["online-mode"] !== "false";
     if (props["max-players"] && !state.max) state.max = Number(props["max-players"]);
     state.version = mc.version();
+    state.plataforma = mc.plataforma();
     state.startedAt = mc.startedAt();
   }
 
@@ -188,7 +198,18 @@ function criarServidor(cfg) {
     }
   }
 
-  const tps = tpsMod.criar({ rcon, online: () => state.online });
+  // O histórico nasce antes do medidor porque é ele quem recebe cada amostra.
+  // O medidor não sabe do arquivo; o coletor não sabe do RCON.
+  const tpsHist = tpsHistMod.criar({
+    dados: cfg.dados,
+    estadoServidor: () => state,
+    log: (lvl, msg) => push(lvl, msg, "panel"),
+  });
+  const tps = tpsMod.criar({
+    rcon,
+    online: () => state.online,
+    registrar: tpsHist.registrar,
+  });
 
   // depois do `state` de propósito: a versão do jogo sai do log e só existe a partir
   // do primeiro refresh, e o Modrinth precisa dela pra saber o que é atualização
@@ -196,6 +217,8 @@ function criarServidor(cfg) {
   const mods = modsMod.criar({
     dados: cfg.dados,
     versao: () => state.version || cfg.versaoPadrao,
+    // idem: decide entre `mods/` e `plugins/`, e sai do log como a versão
+    plataforma: () => state.plataforma,
     // carimbo do boot atual: é como a pendência de reinício sabe que já foi aplicada
     iniciadoEm: () => state.startedAt,
     // trocar jar no meio de uma troca de mundo é pedir para juntar dois problemas
@@ -208,6 +231,17 @@ function criarServidor(cfg) {
     log: (lvl, msg) => push(lvl, msg, "panel"),
     estadoServidor: () => state,
     avisar: (msg) => run(`say ${msg}`),
+  });
+
+  // Backup automático. Sem MC_BACKUPS (ou "backups" no MC_SERVERS) o recurso
+  // simplesmente não existe: é preciso um volume montado para gravar 500 MB,
+  // e o painel não inventa um lugar para isso.
+  const backupAuto = backupAutoMod.criar({
+    dados: cfg.dados,
+    destino: cfg.backups,
+    backup, restore, run,
+    log: (lvl, msg) => push(lvl, msg, "panel"),
+    estadoServidor: () => state,
   });
 
   const agenda = agendaMod.criar({
@@ -247,7 +281,7 @@ function criarServidor(cfg) {
     nome: cfg.nome,
     endereco: cfg.endereco,
     cfg,
-    rcon, mc, history, backup, restore, docker, tps, agenda, mods, aplicarMods,
+    rcon, mc, history, backup, restore, docker, tps, tpsHist, agenda, mods, aplicarMods, backupAuto,
     state,
     push,
     run,

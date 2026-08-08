@@ -12,7 +12,7 @@ import { pipeline } from "node:stream/promises";
  * fora do ar é só a de dois `rename` (instantâneos, mesmo sistema de arquivos).
  *
  * O mundo atual nunca é apagado: vira `world.antes-de-AAAAMMDD-HHMMSS` ao lado.
- * Quem limpa isso é o Carlos pelo painel — some sozinho seria pior que ocupar disco.
+ * Quem limpa isso é você, pelo painel — sumir sozinho seria pior que ocupar disco.
  */
 
 const PRESERVADO_RE = /^world\.antes-de-\d{8}-\d{6}$/;
