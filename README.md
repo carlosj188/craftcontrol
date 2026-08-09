@@ -1,4 +1,7 @@
-# CraftControl
+<p align="center">
+  <img src="assets/banner.png" alt="CraftControl" width="560">
+</p>
+
 
 Painel web para administrar um servidor Minecraft **Fabric, Forge, NeoForge,
 Paper, Purpur, Spigot ou Folia** — jogadores, console, chat, backup, mods (ou

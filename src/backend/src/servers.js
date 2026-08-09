@@ -162,7 +162,13 @@ function criarServidor(cfg) {
       state.error = null;
       state.count = parsed.count;
       state.max = parsed.max;
-      state.players = parsed.nicks.map((nick) => ({ nick, since: firstSeen.get(nick) }));
+      // o log manda: ele tem a hora real do "joined". O `firstSeen` fica de reserva
+      // para quem já estava dentro quando o painel subiu, ou quando a rotação do
+      // log levou o join embora
+      state.players = parsed.nicks.map((nick) => ({
+        nick,
+        since: history.sessaoAberta(nick) || firstSeen.get(nick),
+      }));
     } catch (err) {
       state.online = false;
       state.error = err.message || String(err);

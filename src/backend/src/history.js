@@ -213,5 +213,22 @@ export function criar({ dados }) {
     return out;
   }
 
-  return { build, feed, list, oldest: () => oldestMs };
+  /**
+   * Quando começou a sessão em curso deste jogador, segundo o log.
+   *
+   * É a hora real do "joined the game", e não "quando o painel reparou nele" —
+   * que era o que a lista de jogadores mostrava antes. A diferença aparecia toda
+   * vez que o painel ficava de pé mais tempo que o jogador: o carimbo de uma
+   * sessão antiga sobrevivia e a pessoa entrava já marcada como online há horas.
+   * Além de correto, isto sobrevive a reinício do painel, porque a fonte é o log.
+   *
+   * `null` quando o log não viu o join (rotação levou, ou o painel subiu com o
+   * jogador já dentro) — nesse caso quem responde é o `firstSeen` de sempre.
+   */
+  function sessaoAberta(nick) {
+    const ms = open.get(nick);
+    return ms ? new Date(ms).toISOString() : null;
+  }
+
+  return { build, feed, list, sessaoAberta, oldest: () => oldestMs };
 }

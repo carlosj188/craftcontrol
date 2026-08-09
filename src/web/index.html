@@ -719,11 +719,19 @@
 
   .empty{color:var(--faint);font-size:13px;text-align:center;padding:38px 16px;grid-column:1/-1;
     line-height:1.6}
-  .roadmap{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
-  .ritem{display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--elev);
-    border:1px solid var(--line-soft);border-radius:11px;font-size:13px}
-  .rtag{font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 8px;border-radius:6px;
-    background:rgba(224,179,65,.14);color:var(--amber);margin-left:auto;flex:none;white-space:nowrap}
+
+  /* dica de rodapé: presente, mas nunca competindo com o conteúdo */
+  .dica{display:flex;align-items:flex-start;gap:11px;margin-top:14px;padding:12px 14px;
+    border:1px dashed var(--line);border-radius:11px;background:transparent}
+  .dica svg{width:17px;height:17px;flex:none;color:var(--grass);margin-top:1px}
+  .dica-txt{flex:1;min-width:0;font-size:12.5px;line-height:1.55;color:var(--dim)}
+  .dica-txt b{color:var(--txt);font-weight:600}
+  .dica-txt a{color:var(--grass)}
+  .dica .mini{flex:none;align-self:center}
+  @media (max-width:520px){
+    .dica{flex-wrap:wrap}
+    .dica .mini{margin-left:auto}
+  }
 
   .tabbar{display:none}
 
@@ -797,7 +805,6 @@
     #servidor .modgrid{grid-template-columns:repeat(3,1fr)}
     .modbtn{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 11px;font-size:12px}
     .listgrid,.hlist{grid-template-columns:1fr}
-    .roadmap{grid-template-columns:1fr}
     .bk{gap:12px}
     .bk .btn.pri.big{width:100%;justify-content:center}
     .subtabs{width:100%}
@@ -977,11 +984,6 @@
       <div class="nav-item" data-view="servidor">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
         Servidor
-      </div>
-      <div class="nav-label">Mais</div>
-      <div class="nav-item" data-view="mais">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-        Roadmap
       </div>
     </nav>
     <div class="side-foot">
@@ -1247,7 +1249,20 @@
             <div class="page-title">Servidor</div>
             <div class="page-sub">Desempenho, energia e backup do mundo</div>
           </div>
-          <button class="ghost" data-goto="mais">Roadmap</button>
+        </div>
+
+        <!-- ===== SOBRE ESTE SERVIDOR =====
+             O que você passaria para alguém que vai entrar: endereço, versão e
+             como o servidor trata quem chega. Tudo já vem no /state; nenhuma
+             rota nova. -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">
+            <div class="card-title">Sobre este servidor</div>
+            <span class="hint" id="sobre-nome"></span>
+          </div>
+          <div class="card-body">
+            <div class="mods-resumo" id="sobre-grade" style="display:grid;margin-bottom:0"></div>
+          </div>
         </div>
 
         <!-- ===== DESEMPENHO ===== -->
@@ -1497,22 +1512,20 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- ===== ROADMAP ===== -->
-      <section class="view" id="mais">
-        <div class="page-head">
-          <div>
-            <div class="page-title">Roadmap</div>
-            <div class="page-sub">O que ficou para a próxima rodada</div>
+        <!-- Dica do AutoModpack. Só faz sentido em servidor de MOD: plugin roda
+             inteiro no servidor e o jogador nunca instala nada. Fica no fim da
+             aba, some com um clique e não volta. -->
+        <div class="dica" id="dica-amp" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+          </svg>
+          <div class="dica-txt">
+            <b>Quem entra precisa dos mesmos mods.</b>
+            Com o <a href="https://modrinth.com/mod/automodpack" target="_blank" rel="noopener noreferrer">AutoModpack</a>
+            no servidor, cada jogador baixa e atualiza sozinho ao conectar — você mexe nos mods aqui e não precisa avisar ninguém.
           </div>
-        </div>
-        <div class="card">
-          <div class="card-body roadmap">
-            <div class="ritem">Push no celular quando alguém entra<span class="rtag">fase 3</span></div>
-            <div class="ritem">Gráfico de TPS ao longo do dia<span class="rtag">fase 3</span></div>
-            <div class="ritem">Backup automático no horário<span class="rtag">fase 3</span></div>
-          </div>
+          <button class="mini" id="dica-amp-x" title="não mostrar de novo">Dispensar</button>
         </div>
       </section>
 
@@ -1996,6 +2009,29 @@
     else if (t.tickSuportado === false) tag.textContent = "sem tick query";
   }
 
+  /**
+   * "Sobre este servidor": o que você mandaria para alguém que vai entrar.
+   * Sai todo do `/state` que o polling já traz — nenhuma chamada a mais.
+   */
+  function renderSobre() {
+    const s = st.server;
+    const carregador = CARREGADOR_NOME[s.plataforma] || (modsDados && CARREGADOR_NOME[modsDados.carregador]) || null;
+    const itens = [
+      ["Endereço", s.address || "não configurado"],
+      ["Versão", [s.version || "?", carregador].filter(Boolean).join(" · ")],
+      ["No ar há", s.online && s.startedAt ? elapsed(s.startedAt) : "fora do ar"],
+      ["Jogadores", `${s.count}/${s.max || "?"}`],
+      ["Whitelist", s.whitelistEnabled ? "ligada" : "desligada"],
+      // é a informação que decide quem consegue entrar, e ninguém lembra de olhar
+      // no server.properties: com online-mode=false qualquer nick passa
+      ["Contas", s.onlineMode === false ? "qualquer nick" : "só originais"],
+    ];
+    $("sobre-nome").textContent = s.name || "";
+    $("sobre-grade").innerHTML = itens
+      .map(([k, v]) => `<div class="mstat"><span class="k">${esc(k)}</span><span class="v" style="font-size:14px">${esc(String(v))}</span></div>`)
+      .join("");
+  }
+
   function renderHost() {
     const h = st.host;
     if (!h) return;
@@ -2171,7 +2207,7 @@
         ${avatar(p.nick)}
         <div class="pinfo">
           <div class="pname">${esc(p.nick)}</div>
-          <div class="ptime" title="tempo desde que o painel viu o jogador online">${elapsed(p.since)}</div>
+          <div class="ptime" title="há quanto tempo está conectado nesta sessão">${elapsed(p.since)}</div>
         </div>
         <div class="prow-actions">
           <button class="mini" data-act="tell" data-nick="${esc(p.nick)}">Msg</button>
@@ -2351,6 +2387,10 @@
 
     definirTermos(d.carregador);
     $("nav-mcount").textContent = d.temPasta ? d.total : "";
+    // a dica de sincronizar com o cliente não existe no mundo dos plugins
+    $("dica-amp").style.display =
+      d.temPasta && !FAMILIA_PLUGIN.includes(d.carregador) && localStorage.getItem("mcpanel_dica_amp") !== "off"
+        ? "" : "none";
 
     if (!d.temPasta) {
       $("mods-sub").textContent = "este servidor não tem pasta de mods";
@@ -2697,6 +2737,11 @@
 
   $("mods-busca").addEventListener("input", (e) => { modsFiltro = e.target.value; renderMods(); });
   $("mods-recarregar").onclick = () => loadMods(true);
+
+  $("dica-amp-x").onclick = () => {
+    localStorage.setItem("mcpanel_dica_amp", "off");
+    $("dica-amp").style.display = "none";
+  };
 
   /* ---------------- mods: adicionar (fase 3) ---------------- */
 
@@ -3552,7 +3597,7 @@
     // antes dos renders: num servidor Paper a aba lateral já nasce "Plugins", em
     // vez de virar quando alguém abre a aba pela primeira vez
     definirTermos(data.server.plataforma);
-    renderTop(); renderCounts(); renderPlayers(); renderBans(); renderWL();
+    renderTop(); renderCounts(); renderPlayers(); renderBans(); renderWL(); renderSobre();
     renderHost(); renderTps(); renderPower(); renderAgenda();
     if (data.console.lines.length || first) appendLines(data.console.lines, first);
     coletarChat(data.console.lines);
