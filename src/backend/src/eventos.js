@@ -31,7 +31,14 @@ export function criar({ dados, log }) {
   const PASTA = path.join(dados, "mcpanel");
   const ARQUIVO = path.join(PASTA, "eventos.jsonl");
 
-  let ultimaPoda = Date.now();
+  /**
+   * Zero, e não `Date.now()`: começando no relógio de agora, a poda só rodaria se
+   * o processo sobrevivesse um dia inteiro — e o painel reinicia a cada deploy.
+   * Na prática a retenção nunca era aplicada e o arquivo crescia sem teto,
+   * enquanto a tela prometia 90 dias. Começando em zero, a primeira gravação
+   * depois de subir já limpa o que venceu.
+   */
+  let ultimaPoda = 0;
 
   /**
    * Grava um evento. Nunca lança: falhar em registrar não pode desfazer a ação
@@ -76,23 +83,36 @@ export function criar({ dados, log }) {
   }
 
   /**
-   * Os eventos mais recentes primeiro, com filtros opcionais.
+   * Os eventos mais recentes primeiro, com filtros opcionais, e junto a lista de
+   * quem já apareceu — que é o que a caixa de seleção da interface precisa.
+   *
+   * **As duas coisas saem da mesma passagem.** Antes eram duas: a rota chamava
+   * `ler()` e depois um `quemJaApareceu()` que abria e parseava o arquivo inteiro
+   * de novo, para no fim só extrair nomes do que a primeira já tinha lido.
+   *
+   * `pessoas` ignora os filtros de propósito. Se seguisse o filtro, escolher uma
+   * pessoa tiraria todas as outras da caixa — e a seleção se apagava sozinha.
+   * Também não tem teto: no jeito antigo, os nomes saíam dos 1000 eventos mais
+   * recentes, então quem parava de mexer no painel sumia da caixa sem aviso.
    *
    * Linha ilegível é pulada em silêncio — é append de um processo que pode ser
    * morto no meio de uma escrita, exatamente como no histórico de TPS.
    */
   function ler({ dias, quem, acao, limite = 200 } = {}) {
+    const vazio = { eventos: [], total: 0, pessoas: [], retencaoDias: RETER_DIAS };
     let bruto = "";
-    try { bruto = fs.readFileSync(ARQUIVO, "utf8"); } catch { return { eventos: [], retencaoDias: RETER_DIAS }; }
+    try { bruto = fs.readFileSync(ARQUIVO, "utf8"); } catch { return vazio; }
 
     const corte = dias ? Date.now() - Math.min(RETER_DIAS, Math.max(1, Number(dias))) * 86400_000 : 0;
     const alvoQuem = quem ? String(quem).toLowerCase() : null;
     const out = [];
+    const pessoas = new Set();
 
     for (const linha of bruto.split("\n")) {
       if (!linha) continue;
       let ev;
       try { ev = JSON.parse(linha); } catch { continue; }
+      if (ev.quem) pessoas.add(ev.quem);
       if (corte && new Date(ev.em).getTime() < corte) continue;
       if (alvoQuem && String(ev.quem).toLowerCase() !== alvoQuem) continue;
       if (acao && !String(ev.acao).startsWith(String(acao))) continue;
@@ -103,15 +123,10 @@ export function criar({ dados, log }) {
     return {
       eventos: out.slice(0, Math.min(1000, Math.max(1, Number(limite) || 200))),
       total: out.length,
+      pessoas: [...pessoas].sort((a, b) => a.localeCompare(b)),
       retencaoDias: RETER_DIAS,
     };
   }
 
-  /** Nomes que já apareceram, para o filtro da interface. */
-  function quemJaApareceu() {
-    const { eventos } = ler({ limite: 1000 });
-    return [...new Set(eventos.map((e) => e.quem).filter(Boolean))].sort();
-  }
-
-  return { registrar, ler, quemJaApareceu, arquivo: ARQUIVO };
+  return { registrar, ler, arquivo: ARQUIVO };
 }

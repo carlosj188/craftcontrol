@@ -186,14 +186,13 @@ app.delete("/api/usuarios/:user", async (req) => usuarios.remover(req.params.use
 
 /* ---------------- histórico de eventos ---------------- */
 
-app.get("/api/eventos", async (req) => ({
-  ...eventos.ler({
-    dias: req.query.dias,
-    quem: req.query.quem,
-    acao: req.query.acao,
-    limite: req.query.limite,
-  }),
-  pessoas: eventos.quemJaApareceu(),
+// `pessoas` já vem daqui: é a mesma passagem que monta a lista, não um segundo
+// parse do arquivo inteiro só para extrair nomes
+app.get("/api/eventos", async (req) => eventos.ler({
+  dias: req.query.dias,
+  quem: req.query.quem,
+  acao: req.query.acao,
+  limite: req.query.limite,
 }));
 
 /* ---------------- lista de servidores ---------------- */
