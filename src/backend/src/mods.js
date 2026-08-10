@@ -410,6 +410,15 @@ export function criar({ dados, versao, iniciadoEm, plataforma = () => null, ocup
     try { return JSON.parse(fs.readFileSync(PENDENTE, "utf8")); } catch { return null; }
   }
 
+  /**
+   * Registra a mudança no journal.
+   *
+   * `exigeReinicio: false` marca mudança que **não altera o servidor em
+   * execução** — remover um jar que já estava desativado é o caso: o servidor
+   * não lia aquela pasta, então não há o que recarregar. Ela continua no journal
+   * (é o que permite desfazer e o que manda a lixeira ser esvaziada depois), mas
+   * não acende o aviso de "reinicie para aplicar".
+   */
   function anotarPendencia(acao, arquivo, extra = {}) {
     const carimbo = carimboBoot();
     const atual = lerPendencia();
@@ -429,18 +438,24 @@ export function criar({ dados, versao, iniciadoEm, plataforma = () => null, ocup
   /**
    * As mudanças ainda não confirmadas por um boot, em ordem. Carimbo antigo
    * significa que o servidor subiu depois delas — já valem, e o registro
-   * obsoleto é descartado aqui mesmo.
+   * obsoleto é descartado aqui mesmo, junto dos jars velhos da lixeira: se o
+   * servidor já bootou com as mudanças, não há mais para onde desfazer, e sem
+   * isto os jars ficavam ocupando disco até alguém aplicar outra coisa.
    */
   function journal() {
     const p = lerPendencia();
     if (!p?.mudancas?.length) return [];
-    if (p.carimbo !== carimboBoot()) { limparPendencia(); return []; }
+    if (p.carimbo !== carimboBoot()) { confirmar(); return []; }
     return p.mudancas;
   }
 
   function pendenciaAtual() {
     const m = journal();
-    return m.length ? { desde: m[0].em, total: m.length } : null;
+    if (!m.length) return null;
+    // o que só existe para poder desfazer não conta como motivo de reiniciar
+    const pedem = m.filter((x) => x.exigeReinicio !== false);
+    if (!pedem.length) return null;
+    return { desde: pedem[0].em, total: pedem.length, mudancas: pedem };
   }
 
   /** Guarda contra mexer na pasta enquanto o mundo está sendo trocado. */
@@ -497,8 +512,10 @@ export function criar({ dados, versao, iniciadoEm, plataforma = () => null, ocup
   function apagar(arquivo) {
     exigirLivre();
     const estava = paraLixeira(arquivo);
-    anotarPendencia("removeu", arquivo, { estava });
-    return { arquivo, removido: true };
+    // jar desativado já não era lido pelo servidor: tirá-lo da pasta não muda
+    // nada no que está rodando, e cobrar um reinício por isso seria pedir à toa
+    anotarPendencia("removeu", arquivo, { estava, exigeReinicio: estava === "ativo" });
+    return { arquivo, removido: true, exigeReinicio: estava === "ativo" };
   }
 
   /**

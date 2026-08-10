@@ -693,6 +693,15 @@
 
   /* banner com botão dentro — pendência de reinício, progresso do aplicar e
      atualizações disponíveis usam o mesmo formato */
+  /* o que exatamente espera o reinício, dentro do próprio aviso */
+  .mud-lista{list-style:none;margin:9px 0 0;padding:0;display:grid;gap:4px;
+    grid-template-columns:repeat(auto-fill,minmax(210px,1fr));width:100%}
+  .mud-lista li{font-size:12px;color:var(--dim);display:flex;gap:7px;align-items:baseline;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mud-acao{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);
+    flex:none;font-weight:600}
+  .mud-mais{color:var(--faint);font-style:italic}
+
   .banner.mods-pend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
     background:rgba(224,179,65,.1);border-color:rgba(224,179,65,.3);color:var(--amber)}
   .banner.mods-pend span{flex:1;min-width:200px}
@@ -720,17 +729,22 @@
   .empty{color:var(--faint);font-size:13px;text-align:center;padding:38px 16px;grid-column:1/-1;
     line-height:1.6}
 
-  /* dica de rodapé: presente, mas nunca competindo com o conteúdo */
-  .dica{display:flex;align-items:flex-start;gap:11px;margin-top:14px;padding:12px 14px;
-    border:1px dashed var(--line);border-radius:11px;background:transparent}
-  .dica svg{width:17px;height:17px;flex:none;color:var(--grass);margin-top:1px}
+  /* dica: visível no fluxo da aba, sem virar alarme — a borda esquerda em verde
+     dá o realce; o fundo continua o da superfície elevada, não um destaque */
+  .dica{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:13px 15px;
+    border:1px solid var(--line-soft);border-left:3px solid var(--grass);
+    border-radius:11px;background:var(--elev)}
+  .dica-ico{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+    background:rgba(126,196,64,.12)}
+  .dica-ico svg{width:17px;height:17px;color:var(--grass);display:block}
   .dica-txt{flex:1;min-width:0;font-size:12.5px;line-height:1.55;color:var(--dim)}
   .dica-txt b{color:var(--txt);font-weight:600}
-  .dica-txt a{color:var(--grass)}
-  .dica .mini{flex:none;align-self:center}
-  @media (max-width:520px){
-    .dica{flex-wrap:wrap}
-    .dica .mini{margin-left:auto}
+  .dica-txt a{color:var(--grass);text-decoration:underline;text-underline-offset:2px}
+  .dica .mini{flex:none}
+  @media (max-width:560px){
+    .dica{flex-wrap:wrap;gap:10px}
+    .dica-txt{flex-basis:100%;order:2}
+    .dica .mini{order:3;margin-left:auto}
   }
 
   .tabbar{display:none}
@@ -1508,27 +1522,29 @@
           <div class="mstat"><span class="k">Só de cliente</span><span class="v mono" id="mods-cliente">–</span></div>
         </div>
 
-        <div class="card">
-          <div class="card-body">
-            <div class="mlist" id="mods-lista">
-              <div class="empty">Carregando…</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Dica do AutoModpack. Só faz sentido em servidor de MOD: plugin roda
-             inteiro no servidor e o jogador nunca instala nada. Fica no fim da
-             aba, some com um clique e não volta. -->
+        <!-- Dica do AutoModpack, no fluxo de leitura da aba: no rodapé ninguém via.
+             Só faz sentido em servidor de MOD — plugin roda inteiro no servidor e
+             o jogador nunca instala nada. Some com um clique e não volta. -->
         <div class="dica" id="dica-amp" style="display:none">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-            <path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
-          </svg>
+          <span class="dica-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+          </span>
           <div class="dica-txt">
             <b>Quem entra precisa dos mesmos mods.</b>
             Com o <a href="https://modrinth.com/mod/automodpack" target="_blank" rel="noopener noreferrer">AutoModpack</a>
             no servidor, cada jogador baixa e atualiza sozinho ao conectar — você mexe nos mods aqui e não precisa avisar ninguém.
           </div>
           <button class="mini" id="dica-amp-x" title="não mostrar de novo">Dispensar</button>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="mlist" id="mods-lista">
+              <div class="empty">Carregando…</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2472,7 +2488,8 @@
       pend.style.display = "";
       const n = d.pendente.total;
       $("mods-pendente-txt").innerHTML = `${n} ${n === 1 ? "mudança espera" : "mudanças esperam"} reinício.
-        Nenhum carregador troca mod com o servidor no ar — até reiniciar, o que está rodando é o de antes.`;
+        Nenhum carregador troca ${termos.s} com o servidor no ar — até reiniciar, o que está rodando é o de antes.
+        ${listaMudancas(d.pendente.mudancas)}`;
     } else {
       pend.style.display = "none";
     }
@@ -2582,6 +2599,28 @@
   /* ---------------- mods: ações (fase 2) ---------------- */
 
   const acharMod = (arquivo) => (modsDados?.mods || []).find((m) => m.arquivo === arquivo);
+
+  const ACAO_NOME = {
+    ativou: "ativado", desativou: "desativado", removeu: "removido",
+    instalou: "instalado", atualizou: "atualizado",
+  };
+
+  /**
+   * O que exatamente está esperando o reinício.
+   *
+   * Saber que "3 mudanças esperam" não ajuda a decidir se vale reiniciar agora;
+   * saber *quais* ajuda. Vem do mesmo journal que o desfazer usa, então a lista
+   * é literalmente o que será revertido se o servidor não voltar.
+   */
+  function listaMudancas(mudancas) {
+    if (!mudancas?.length) return "";
+    const linhas = mudancas.slice(-8).map((m) => {
+      const nome = String(m.arquivo || "").replace(/\.jar$/i, "");
+      return `<li><span class="mud-acao">${esc(ACAO_NOME[m.acao] || m.acao)}</span> ${esc(nome)}</li>`;
+    }).join("");
+    const resto = mudancas.length > 8 ? `<li class="mud-mais">e mais ${mudancas.length - 8}</li>` : "";
+    return `<ul class="mud-lista">${linhas}${resto}</ul>`;
+  }
 
   /** Frase pronta sobre quem depende deste mod — o aviso que evita o tiro no pé. */
   function quemQuebra(m) {
