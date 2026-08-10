@@ -7,12 +7,27 @@ import fastifyStatic from "@fastify/static";
 import * as servers from "./servers.js";
 import * as sysinfo from "./sysinfo.js";
 import {
-  issueToken, verifyToken, checkCredentials,
+  issueToken, verifyToken,
   tooManyAttempts, registerFailure, clearFailures,
 } from "./auth.js";
+import * as usuariosMod from "./usuarios.js";
+import * as eventosMod from "./eventos.js";
+import { regraDe, servidorDaUrl } from "./permissoes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8095);
+
+/**
+ * Onde ficam os dados do PAINEL (usuários, eventos), que não são de um servidor
+ * específico. Sem `PANEL_DATA`, usa o volume do primeiro servidor configurado:
+ * ele é obrigatório e gravável, então a instalação existente não precisa de
+ * volume novo nenhum para ganhar multiusuário.
+ */
+const PAINEL_DADOS = process.env.PANEL_DATA || servers.lista()[0]?.cfg.dados || "/mcdata";
+
+const registroLog = (lvl, msg) => console.warn(`[painel] ${msg}`);
+const usuarios = usuariosMod.criar({ dados: PAINEL_DADOS, log: registroLog });
+const eventos = eventosMod.criar({ dados: PAINEL_DADOS, log: registroLog });
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "warn" } });
 
@@ -61,12 +76,16 @@ app.post("/api/auth/login", async (req, reply) => {
   const ip = req.ip;
   if (tooManyAttempts(ip)) return reply.code(429).send({ error: "muitas tentativas, espere 15 min" });
   const { user, password } = req.body ?? {};
-  if (!checkCredentials(user, password)) {
+  const conta = usuarios.autenticar(user, password);
+  if (!conta) {
     registerFailure(ip);
+    // guarda a tentativa com o nome digitado, que é o que denuncia acesso indevido
+    req.eventoLogin = { user: String(user ?? "").slice(0, 32), ok: false };
     return reply.code(401).send({ error: "usuário ou senha inválidos" });
   }
   clearFailures(ip);
-  return { token: issueToken(String(user)), user: String(user) };
+  req.eventoLogin = { user: conta.user, ok: true };
+  return { token: issueToken(conta.user), user: conta.user, papel: conta.papel };
 });
 
 // defesa barata: ninguém emoldura o painel, nada é interpretado fora do tipo declarado.
@@ -102,7 +121,80 @@ app.addHook("onRequest", async (req, reply) => {
   const payload = verifyToken(header.startsWith("Bearer ") ? header.slice(7) : "");
   if (!payload) return reply.code(401).send({ error: "não autenticado" });
   req.user = payload.sub;
+
+  // o papel vem do arquivo agora, não do token: tirar o acesso de alguém precisa
+  // valer na hora, e não só quando o crachá dele vencer daqui a uma semana
+  req.papel = usuarios.papelDe(payload.sub);
+  if (!req.papel) return reply.code(401).send({ error: "este usuário não existe mais" });
+
+  const regra = regraDe(req.method, req.url);
+  req.regra = regra;
+  if (!usuariosMod.podeMais(req.papel, regra.papel)) {
+    return reply.code(403).send({ error: `esta ação é de ${regra.papel}; você é ${req.papel}` });
+  }
 });
+
+/**
+ * O histórico, num lugar só. Aqui já se sabe quem chamou, o que respondeu e se
+ * deu certo — espalhar isso pelos ~45 handlers seria mais código e garantiria
+ * esquecer algum. Só grava mutação e login; `GET` viraria ruído.
+ */
+app.addHook("onResponse", async (req, reply) => {
+  try {
+    if (req.eventoLogin) {
+      eventos.registrar({
+        quem: req.eventoLogin.user,
+        papel: req.eventoLogin.ok ? usuarios.papelDe(req.eventoLogin.user) : null,
+        acao: req.eventoLogin.ok ? "login" : "login.falhou",
+        resumo: req.eventoLogin.ok ? "entrou no painel" : "errou usuário ou senha",
+        ip: req.ip,
+        ok: req.eventoLogin.ok,
+      });
+      return;
+    }
+    if (req.method === "GET" || !req.regra?.acao) return;
+    // 4xx de validação não é ação: registrar tentativa inválida encheria o
+    // arquivo de ruído. 403 de permissão importa e é gravado.
+    const st = reply.statusCode;
+    if (st >= 400 && st !== 403) return;
+    // "ligou o backup automático" com ok=false lido rápido parece que ligou; o
+    // prefixo deixa a linha honesta mesmo lendo o arquivo cru, sem a interface
+    const base = req.regra.resumo?.(req, req.regra.m) ?? null;
+    eventos.registrar({
+      quem: req.user,
+      papel: req.papel,
+      acao: req.regra.acao,
+      resumo: st === 403 && base ? `tentou: ${base}` : base,
+      servidor: servidorDaUrl(req.url),
+      ip: req.ip,
+      ok: st < 400,
+    });
+  } catch (err) {
+    registroLog("warn", `evento não registrado: ${err.message}`);
+  }
+});
+
+/* ---------------- usuários do painel ---------------- */
+
+app.get("/api/usuarios", async (req) => ({ usuarios: usuarios.listar(), eu: req.user }));
+
+app.post("/api/usuarios", async (req) => usuarios.adicionar(req.body ?? {}, req.user));
+
+app.put("/api/usuarios/:user", async (req) => usuarios.alterar(req.params.user, req.body ?? {}, req.user));
+
+app.delete("/api/usuarios/:user", async (req) => usuarios.remover(req.params.user, req.user));
+
+/* ---------------- histórico de eventos ---------------- */
+
+app.get("/api/eventos", async (req) => ({
+  ...eventos.ler({
+    dias: req.query.dias,
+    quem: req.query.quem,
+    acao: req.query.acao,
+    limite: req.query.limite,
+  }),
+  pessoas: eventos.quemJaApareceu(),
+}));
 
 /* ---------------- lista de servidores ---------------- */
 
@@ -133,6 +225,9 @@ async function rotasServidor(app) {
       // exatamente o fuso. Mandando o instante daqui, a interface mede pelo
       // servidor e o relógio do visitante deixa de importar.
       agora: Date.now(),
+      // a interface esconde o que o papel não alcança; quem decide de verdade é
+      // o hook de permissão, isto é só para não oferecer botão que dá 403
+      eu: { user: req.user, papel: req.papel },
       server: {
         id: srv.id,
         name: srv.nome,

@@ -121,9 +121,36 @@ nunca o valor: o segredo continua só no `.env`.
 
 ---
 
+## Usuários e histórico
+
+O painel tem **três papéis**:
+
+| papel | pode |
+| --- | --- |
+| **admin** | tudo: mods, restaurar mundo, energia, agenda, backup automático, console e gerir usuários |
+| **operador** | o dia a dia: chat, expulsar, banir, whitelist e baixar backup |
+| **leitor** | só acompanha |
+
+O usuário do `.env` (`ADMIN_USER`) é **sempre admin** e não aparece na lista para
+ser removido ou rebaixado: é a chave-mestra que garante a volta se você esquecer
+a senha de alguém. Os demais são criados dentro do painel, na aba **Atividade**,
+e ficam num arquivo com a senha guardada em `scrypt` — nunca em texto.
+
+Tirar o acesso de alguém **vale na hora**: o papel é lido a cada requisição, e
+não fica preso ao token até a sessão vencer.
+
+A mesma aba mostra **quem fez o quê** — cada mudança e cada login, inclusive os
+que falharam. O histórico fica em disco (não some no reinício) e guarda 90 dias
+por padrão (`EVENTOS_DIAS`). Consulta é assunto de admin.
+
+---
+
 ## Segurança
 
-- Login único com token JWT assinado (HS256), com trava contra força bruta.
+- Token JWT assinado (HS256), com trava contra força bruta e papéis por rota.
+- **A permissão é decidida no servidor, numa tabela única.** A interface esconde
+  o que o papel não alcança, mas quem recusa é o backend — e rota nova nasce
+  exigindo admin, não liberada.
 - O contêiner roda **sem root** (uid 1000), com filesystem **read-only**,
   `cap_drop: ALL` e `no-new-privileges`.
 - O painel **nunca toca no socket do Docker**. Ligar/desligar passa por um

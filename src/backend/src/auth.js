@@ -1,11 +1,20 @@
 import crypto from "node:crypto";
 
+/**
+ * Sessão: emite e confere o token, e segura força bruta.
+ *
+ * Quem confere usuário e senha é o `usuarios.js` — aqui só se cuida do crachá.
+ * O token carrega **apenas quem é a pessoa**, nunca o papel dela: papel no token
+ * significaria que tirar o acesso de alguém só valeria no próximo login, e o
+ * crachá dura 7 dias.
+ */
+
 const SECRET = process.env.JWT_SECRET || "";
-const USER = process.env.ADMIN_USER || "admin";
 const PASSWORD = process.env.ADMIN_PASSWORD || "";
 const TTL_DAYS = Number(process.env.SESSION_DAYS || 7);
 
 if (!SECRET) throw new Error("JWT_SECRET não definido");
+// segue obrigatório: é o admin de partida e a saída de emergência do painel
 if (!PASSWORD) throw new Error("ADMIN_PASSWORD não definido");
 
 const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
@@ -33,19 +42,6 @@ export function verifyToken(token) {
   } catch {
     return null;
   }
-}
-
-function equals(a, b) {
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  // compara o hash pra não vazar o tamanho da senha pelo tempo de resposta
-  const ha = crypto.createHash("sha256").update(ba).digest();
-  const hb = crypto.createHash("sha256").update(bb).digest();
-  return crypto.timingSafeEqual(ha, hb);
-}
-
-export function checkCredentials(user, password) {
-  return equals(user ?? "", USER) && equals(password ?? "", PASSWORD);
 }
 
 /** Freio simples de força bruta por IP — o painel é VPN-only, mas login é login. */

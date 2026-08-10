@@ -736,6 +736,33 @@
   .empty{color:var(--faint);font-size:13px;text-align:center;padding:38px 16px;grid-column:1/-1;
     line-height:1.6}
 
+  /* ---------- atividade ---------- */
+  .evlist{display:grid;gap:2px}
+  .evrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:baseline;
+    padding:9px 11px;border-radius:9px;font-size:13px}
+  .evrow:nth-child(odd){background:var(--inset)}
+  .evrow.negado{color:var(--dim)}
+  .ev-quem{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:150px}
+  .ev-txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+  .evrow.negado .ev-txt{color:var(--red)}
+  .ev-quando{font-size:11.5px;color:var(--faint);white-space:nowrap;font-family:"JetBrains Mono",monospace}
+  .ev-tag{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;
+    border-radius:5px;background:var(--elev-2);color:var(--faint);margin-right:7px}
+
+  .papel{font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;
+    border-radius:6px;font-weight:600;flex:none}
+  .papel.admin{background:rgba(224,179,65,.15);color:var(--amber)}
+  .papel.operador{background:rgba(126,196,64,.14);color:var(--grass)}
+  .papel.leitor{background:var(--elev-2);color:var(--faint)}
+
+  @media (max-width:620px){
+    .evrow{grid-template-columns:1fr auto;gap:4px 10px}
+    .ev-quem{grid-column:1}
+    .ev-quando{grid-column:2;grid-row:1}
+    .ev-txt{grid-column:1/-1;white-space:normal}
+  }
+
   /* dica: visível no fluxo da aba, sem virar alarme — a borda esquerda em verde
      dá o realce; o fundo continua o da superfície elevada, não um destaque */
   .dica{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:13px 15px;
@@ -1006,6 +1033,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="1.8"/><rect x="3" y="13" width="18" height="7" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
         Servidor
       </div>
+      <!-- só admin: quem tem acesso e o que cada um fez é assunto de administração.
+           Fica fora da tabbar do celular, que já está com 7 no limite — lá se chega
+           pelo botão na aba Servidor. -->
+      <div class="nav-item" data-view="atividade" id="nav-atividade" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+        Atividade
+      </div>
     </nav>
     <div class="side-foot">
       <!-- ícone em vez de avatar: quem entra no painel é uma conta de administração,
@@ -1015,7 +1049,7 @@
           <circle cx="12" cy="8.4" r="3.6"/><path d="M4.8 20c0-3.6 3.2-6.1 7.2-6.1s7.2 2.5 7.2 6.1"/>
         </svg>
       </div>
-      <div class="quem" id="quem-sou">–<span>admin</span></div>
+      <div class="quem" id="quem-sou">–<span id="quem-papel">–</span></div>
     </div>
   </aside>
 
@@ -1478,6 +1512,64 @@
             <div id="rs-guardados" style="margin-top:18px"></div>
           </div>
         </div>
+
+        <!-- no celular a Atividade não cabe na tabbar; a porta de entrada é esta -->
+        <div class="card" id="atalho-atividade" style="display:none">
+          <div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="font-weight:600;font-size:13.5px">Atividade e usuários</div>
+              <div class="hint" style="margin:2px 0 0">Quem entrou no painel e o que cada um fez.</div>
+            </div>
+            <button class="btn sec" data-goto="atividade">Abrir</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ATIVIDADE (só admin) ===== -->
+      <section class="view" id="atividade">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Atividade</div>
+            <div class="page-sub" id="ativ-sub">Quem fez o quê no painel</div>
+          </div>
+          <div class="mods-acoes">
+            <select id="ev-quem" class="mods-filtro" style="width:170px"><option value="">todo mundo</option></select>
+            <button class="ghost" id="ev-recarregar">Reler</button>
+          </div>
+        </div>
+
+        <div class="subtabs" id="ativ-abas">
+          <div class="subtab active" data-ativ="eventos">Eventos</div>
+          <div class="subtab" data-ativ="usuarios">Usuários <span class="n" id="ativ-n-users">0</span></div>
+        </div>
+
+        <div id="pane-eventos">
+          <div class="card">
+            <div class="card-body">
+              <div class="evlist" id="ev-lista"><div class="empty">Carregando…</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pane-usuarios" style="display:none">
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Quem tem acesso</div>
+              <button class="add-srv" id="user-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Novo usuário
+              </button>
+            </div>
+            <div class="card-body">
+              <div class="listgrid" id="user-lista"></div>
+              <div class="hint" style="margin-top:14px">
+                <b>admin</b> faz tudo, inclusive mexer em mods, restaurar o mundo e gerir usuários ·
+                <b>operador</b> toca o dia a dia (chat, expulsar, banir, whitelist, baixar backup) ·
+                <b>leitor</b> só acompanha.
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ===== MODS (ou PLUGINS) =====
@@ -1646,6 +1738,33 @@
     </div>
     <div class="modal-foot">
       <button class="btn sec" id="addmod-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOVO/EDITAR USUÁRIO -->
+<div class="overlay" id="usermodal">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Usuário">
+    <div class="modal-head">
+      <h3 id="um-titulo">Novo usuário</h3>
+      <button class="icon-btn" id="um-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Usuário</label><input id="um-user" autocomplete="off" placeholder="ex.: olipalitos"></div>
+      <div class="field"><label id="um-senha-label">Senha</label>
+        <input id="um-senha" type="password" autocomplete="new-password" placeholder="pelo menos 8 caracteres"></div>
+      <div class="field"><label>Papel</label>
+        <select id="um-papel">
+          <option value="leitor">leitor — só acompanha</option>
+          <option value="operador">operador — chat, expulsar, banir, whitelist</option>
+          <option value="admin">admin — tudo, inclusive mods e usuários</option>
+        </select>
+      </div>
+      <div class="banner off" id="um-erro" style="display:none"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sec" id="um-cancelar">Cancelar</button>
+      <button class="btn pri" id="um-salvar">Salvar</button>
     </div>
   </div>
 </div>
@@ -2325,6 +2444,171 @@
     $("wl-toggle").setAttribute("aria-checked", String(st.server.whitelistEnabled));
     $("wl-add").onclick = wlAdd;
   }
+
+  /* ---------------- atividade: eventos e usuários ---------------- */
+
+  /**
+   * A aba inteira é de admin — a navegação só aparece para quem pode. Isso é
+   * conforto, não segurança: quem decide é o backend, que devolve 403 de
+   * qualquer jeito. Aqui só evitamos oferecer botão que não vai funcionar.
+   */
+  const souAdmin = () => st?.eu?.papel === "admin";
+
+  let ativAba = "eventos";
+  let usuariosCache = [];
+
+  function aplicarPapelNaInterface() {
+    const admin = souAdmin();
+    // o rótulo ao lado do nome dizia "admin" fixo no HTML: para um operador,
+    // era o painel afirmando um poder que ele não tem
+    if (st?.eu?.papel) $("quem-papel").textContent = st.eu.papel;
+    $("nav-atividade").style.display = admin ? "" : "none";
+    $("atalho-atividade").style.display = admin ? "" : "none";
+    // se um leitor estava com a aba aberta e foi rebaixado, tira ele de lá
+    if (!admin && $("atividade").classList.contains("active")) goto("painel");
+  }
+
+  async function loadAtividade(forcar = false) {
+    if (!souAdmin()) return;
+    if (ativAba === "usuarios") return loadUsuarios(forcar);
+    return loadEventos(forcar);
+  }
+
+  async function loadEventos() {
+    const btn = $("ev-recarregar");
+    btn.disabled = true;
+    try {
+      const quem = $("ev-quem").value;
+      const d = await apiRaiz(`/eventos?limite=200${quem ? `&quem=${encodeURIComponent(quem)}` : ""}`);
+      // o filtro de pessoas se mantém sozinho conforme o histórico cresce
+      const sel = $("ev-quem");
+      const atual = sel.value;
+      sel.innerHTML = `<option value="">todo mundo</option>` +
+        (d.pessoas || []).map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+      sel.value = atual;
+
+      $("ativ-sub").textContent = `${d.total} evento(s) · guardados por ${d.retencaoDias} dias`;
+      $("ev-lista").innerHTML = d.eventos.length ? d.eventos.map((e) => {
+        const negado = e.ok === false;
+        const onde = e.servidor && (st?.servers?.length || 1) > 1 ? `<span class="ev-tag">${esc(e.servidor)}</span>` : "";
+        return `<div class="evrow${negado ? " negado" : ""}">
+          <div class="ev-quem">${esc(e.quem)}</div>
+          <div class="ev-txt" title="${esc(e.resumo || e.acao)}">${onde}${esc(e.resumo || e.acao)}</div>
+          <div class="ev-quando" title="${esc(new Date(e.em).toLocaleString("pt-BR"))}">${esc(quando(new Date(e.em).getTime()))}</div>
+        </div>`;
+      }).join("") : `<div class="empty">Nada registrado ainda.</div>`;
+    } catch (err) {
+      $("ev-lista").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadUsuarios() {
+    try {
+      const d = await apiRaiz("/usuarios");
+      usuariosCache = d.usuarios || [];
+      $("ativ-n-users").textContent = usuariosCache.length;
+      $("user-lista").innerHTML = usuariosCache.map((u) => {
+        const eu = u.user === d.eu;
+        // o admin do .env não mora no arquivo: não dá para editar nem remover por aqui
+        const acoes = u.doEnv
+          ? `<span class="hint" style="margin:0">vem do .env</span>`
+          : `<button class="mini" data-user-edit="${esc(u.user)}">Editar</button>` +
+            (eu ? "" : `<button class="mini ban" data-user-rm="${esc(u.user)}">Remover</button>`);
+        return `<div class="listrow">
+          ${avatar(u.user)}
+          <div class="txt pname">${esc(u.user)}${eu ? " <span class=\"hint\" style=\"margin:0\">(você)</span>" : ""}</div>
+          <span class="papel ${esc(u.papel)}">${esc(u.papel)}</span>
+          <div class="act">${acoes}</div>
+        </div>`;
+      }).join("");
+    } catch (err) {
+      $("user-lista").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  $("ativ-abas").onclick = (e) => {
+    const t = e.target.closest("[data-ativ]");
+    if (!t) return;
+    ativAba = t.dataset.ativ;
+    [...$("ativ-abas").children].forEach((c) => c.classList.toggle("active", c === t));
+    $("pane-eventos").style.display = ativAba === "eventos" ? "" : "none";
+    $("pane-usuarios").style.display = ativAba === "usuarios" ? "" : "none";
+    loadAtividade(true);
+  };
+
+  $("ev-recarregar").onclick = () => loadEventos();
+  $("ev-quem").onchange = () => loadEventos();
+
+  /* ---- criar e editar usuário ---- */
+
+  let editando = null;
+
+  function abrirUsuario(user) {
+    editando = user || null;
+    const u = user ? usuariosCache.find((x) => x.user === user) : null;
+    $("um-titulo").textContent = user ? `Editar ${user}` : "Novo usuário";
+    $("um-user").value = user || "";
+    $("um-user").disabled = Boolean(user);
+    $("um-senha").value = "";
+    $("um-senha-label").textContent = user ? "Nova senha (deixe vazio para manter)" : "Senha";
+    $("um-papel").value = u?.papel || "leitor";
+    $("um-erro").style.display = "none";
+    $("usermodal").classList.add("open");
+    setTimeout(() => $(user ? "um-senha" : "um-user").focus(), 60);
+  }
+
+  const fecharUsuario = () => $("usermodal").classList.remove("open");
+  $("um-x").onclick = fecharUsuario;
+  $("um-cancelar").onclick = fecharUsuario;
+  $("user-add").onclick = () => abrirUsuario(null);
+
+  $("um-salvar").onclick = async () => {
+    const user = $("um-user").value.trim();
+    const senha = $("um-senha").value;
+    const papel = $("um-papel").value;
+    const erro = $("um-erro");
+    erro.style.display = "none";
+    try {
+      if (editando) {
+        const corpo = { papel };
+        if (senha) corpo.senha = senha;
+        await apiRaiz(`/usuarios/${encodeURIComponent(editando)}`, { method: "PUT", body: JSON.stringify(corpo) });
+        toast(`${editando} atualizado`);
+      } else {
+        await apiRaiz("/usuarios", { method: "POST", body: JSON.stringify({ user, senha, papel }) });
+        toast(`${user} criado como ${papel}`);
+      }
+      fecharUsuario();
+      loadUsuarios();
+    } catch (err) {
+      erro.textContent = err.message;
+      erro.style.display = "";
+    }
+  };
+
+  $("user-lista").onclick = async (e) => {
+    const ed = e.target.closest("[data-user-edit]");
+    if (ed) return abrirUsuario(ed.dataset.userEdit);
+
+    const rm = e.target.closest("[data-user-rm]");
+    if (!rm) return;
+    const alvo = rm.dataset.userRm;
+    const ok = await ask({
+      title: `Remover ${alvo}`,
+      label: "digite REMOVER para confirmar",
+      text: `${alvo} perde o acesso ao painel na hora — sem esperar a sessão vencer.`,
+      placeholder: "REMOVER",
+      confirm: "Remover",
+    });
+    if (ok !== "REMOVER") { if (ok !== null) toast("cancelado: era preciso digitar REMOVER", true); return; }
+    try {
+      await apiRaiz(`/usuarios/${encodeURIComponent(alvo)}`, { method: "DELETE" });
+      toast(`${alvo} removido`);
+      loadUsuarios();
+    } catch (err) { toast(err.message, true); }
+  };
 
   /* ---------------- histórico ---------------- */
 
@@ -3683,6 +3967,7 @@
     // vez de virar quando alguém abre a aba pela primeira vez
     definirTermos(data.server.plataforma);
     renderTop(); renderCounts(); renderPlayers(); renderBans(); renderWL(); renderSobre();
+    aplicarPapelNaInterface();
     renderHost(); renderTps(); renderPower(); renderAgenda();
     if (data.console.lines.length || first) appendLines(data.console.lines, first);
     coletarChat(data.console.lines);
@@ -3946,6 +4231,7 @@
     if (view === "servidor") { loadBackupInfo(); loadGuardados(); loadGrafico(); loadBackupAuto(); }
     if (view === "chat") loadChat();
     if (view === "mods") loadMods();
+    if (view === "atividade") loadAtividade();
     if (view === "jogadores" && histVisivel()) loadHistory();
   }
   const histVisivel = () => $("jogadores").classList.contains("active") && $("hist-wrap").style.display !== "none";
