@@ -126,6 +126,13 @@ async function rotasServidor(app) {
     // alguém está olhando: acelera a medição de TPS (ela mede sempre, mas devagar)
     srv.tps.acordar();
     return {
+      // O relógio do servidor. Todo tempo mostrado no painel ("online há", uptime,
+      // "faltam X para o reinício") era calculado com o relógio de quem estava
+      // olhando — e máquina com hora errada é comum: em dual boot, o Windows lê
+      // como hora local o relógio que o Linux gravou em UTC, e fica adiantado
+      // exatamente o fuso. Mandando o instante daqui, a interface mede pelo
+      // servidor e o relógio do visitante deixa de importar.
+      agora: Date.now(),
       server: {
         id: srv.id,
         name: srv.nome,

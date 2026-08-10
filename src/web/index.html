@@ -1031,6 +1031,9 @@
 
     <div class="content">
 
+      <!-- aparece só quando o relógio do aparelho está fora de hora -->
+      <div class="banner" id="aviso-relogio" style="display:none;margin-bottom:14px"></div>
+
       <!-- ===== VISÃO GERAL ===== -->
       <section class="view active" id="painel">
         <div class="overview">
@@ -1826,9 +1829,22 @@
 
   /* ---------------- formatação ---------------- */
 
+  /**
+   * O relógio do SERVIDOR, não o desta máquina.
+   *
+   * Todo tempo aqui é uma subtração contra "agora", e usar o relógio local
+   * significava mostrar errado sempre que o aparelho estivesse fora de hora — o
+   * caso mais comum é dual boot, em que o Windows lê como hora local o relógio
+   * que o Linux gravou em UTC e fica adiantado exatamente o fuso. O `/state`
+   * manda o instante do servidor a cada 2 s; guardamos a diferença e passamos a
+   * medir por ela. Vale para sessão, uptime, agenda e gráfico.
+   */
+  let desvioRelogio = 0;   // ms: relógio local menos o do servidor
+  const agora = () => Date.now() - desvioRelogio;
+
   function elapsed(iso) {
     if (!iso) return "–";
-    const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    const s = Math.max(0, Math.floor((agora() - new Date(iso).getTime()) / 1000));
     const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
     if (d) return `${d}d ${h}h`;
     if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
@@ -1853,7 +1869,7 @@
     const d = new Date(ms);
     // dias de calendário, não 24h corridas: às 10h da manhã, 23h de ontem é "ontem"
     const zera = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y.getTime(); };
-    const dias = Math.round((zera(Date.now()) - zera(ms)) / 86400000);
+    const dias = Math.round((zera(agora()) - zera(ms)) / 86400000);
     const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     if (dias <= 0) return `hoje ${hora}`;
     if (dias === 1) return `ontem ${hora}`;
@@ -1863,7 +1879,7 @@
 
   function quandoDia(d) {
     const zera = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y.getTime(); };
-    const dias = Math.round((zera(Date.now()) - zera(d)) / 86400000);
+    const dias = Math.round((zera(agora()) - zera(d)) / 86400000);
     if (dias <= 0) return "hoje";
     if (dias === 1) return "ontem";
     return d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" });
@@ -2010,6 +2026,22 @@
   }
 
   /**
+   * Relógio fora de hora não quebra mais o painel, mas quebra outras coisas
+   * (certificado, log do jogo, captura de tela), então vale dizer em voz baixa.
+   * Dois minutos de tolerância cobrem latência e máquina sem NTP fino.
+   */
+  function avisarRelogio() {
+    const el = $("aviso-relogio");
+    const min = Math.round(Math.abs(desvioRelogio) / 60000);
+    if (min < 2) { el.style.display = "none"; return; }
+    const h = Math.floor(min / 60), m = min % 60;
+    const quanto = h ? `${h}h${m ? String(m).padStart(2, "0") : ""}` : `${m} min`;
+    el.style.display = "";
+    el.innerHTML = `O relógio deste aparelho está <b>${quanto} ${desvioRelogio > 0 ? "adiantado" : "atrasado"}</b>
+      em relação ao servidor. Os tempos abaixo já estão corrigidos, mas vale acertar a hora da máquina.`;
+  }
+
+  /**
    * "Sobre este servidor": o que você mandaria para alguém que vai entrar.
    * Sai todo do `/state` que o polling já traz — nenhuma chamada a mais.
    */
@@ -2111,7 +2143,7 @@
     const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1);
     const nome = dia(d, hoje) ? "hoje" : dia(d, amanha) ? "amanhã" : DIAS_NOME[d.getDay()];
     const hh = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    const faltam = d.getTime() - Date.now();
+    const faltam = d.getTime() - agora();
     const h = Math.floor(faltam / 3600000), m = Math.floor((faltam % 3600000) / 60000);
     const resta = h > 0 ? `em ${h}h${String(m).padStart(2, "0")}` : `em ${Math.max(1, m)} min`;
     return `${nome} às ${hh} · ${resta}`;
@@ -3070,7 +3102,7 @@
     caixa.querySelector(".graf-sem")?.remove();
     svg.style.display = "";
 
-    const fim = Date.now() / 1000;
+    const fim = agora() / 1000;
     const ini = fim - grafHoras * 3600;
     const x = (t) => ((t - ini) / (fim - ini)) * GRAF_W;
     const y = (tps) => GRAF_BASE - (Math.min(20, Math.max(0, tps)) / 20) * (GRAF_BASE - GRAF_TOPO);
@@ -3157,7 +3189,7 @@
     const svgR = $("graf").getBoundingClientRect();
     const frac = Math.min(1, Math.max(0, (e.clientX - svgR.left) / svgR.width));
 
-    const fim = Date.now() / 1000;
+    const fim = agora() / 1000;
     const ini = fim - grafHoras * 3600;
     const alvoT = ini + frac * (fim - ini);
 
@@ -3594,6 +3626,12 @@
       if ($("mods").classList.contains("active")) loadMods();
     }
     st = data;
+    // o desvio é medido a cada resposta: se o relógio da máquina estiver fora de
+    // hora, todos os tempos continuam certos porque passam a ser medidos daqui
+    if (data.agora) {
+      desvioRelogio = Date.now() - data.agora;
+      avisarRelogio();
+    }
     // antes dos renders: num servidor Paper a aba lateral já nasce "Plugins", em
     // vez de virar quando alguém abre a aba pela primeira vez
     definirTermos(data.server.plataforma);
