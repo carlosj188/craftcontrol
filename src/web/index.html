@@ -140,11 +140,12 @@
   .nav-item.active .badge{color:var(--grass)}
   .side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line-soft);
     display:flex;align-items:center;gap:10px;color:var(--dim);font-size:12px}
-  .side-foot .av{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
-    background:var(--elev-2);border:1px solid var(--line);color:var(--faint)}
-  .side-foot .av svg{width:17px;height:17px}
-  .side-foot .quem{min-width:0;line-height:1.25}
+  .side-foot .quem{min-width:0;flex:1;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .side-foot .quem span{display:block;color:var(--faint);font-size:11px}
+  /* sair fica discreto até o ponteiro chegar: é uma porta, não um convite */
+  .icon-btn.sair{width:30px;height:30px;flex:none}
+  .icon-btn.sair svg{width:15px;height:15px}
+  .icon-btn.sair:hover{color:var(--red);border-color:rgba(229,83,75,.5);background:rgba(229,83,75,.08)}
 
   /* ---------- main ---------- */
   .main{min-width:0;display:flex;flex-direction:column}
@@ -221,14 +222,73 @@
     border-radius:16px;box-shadow:0 24px 60px -20px rgba(0,0,0,.8);overflow:hidden;animation:pop .18s ease}
   @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
   .modal-head{padding:15px 18px;border-bottom:1px solid var(--line-soft);flex:none;
-    display:flex;align-items:center;justify-content:space-between;gap:12px}
+    display:flex;align-items:center;gap:12px}
   .modal-head h3{font-size:15px;font-weight:600}
+  /* o bloco de texto empurra o X para a direita; sem isto, `space-between` com
+     três filhos deixava a legenda solta no meio da barra */
+  .modal-head .mh-tx{flex:1;min-width:0}
+  .modal-head .mh-sub{font-size:11.5px;color:var(--faint);margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modal-head .icon-btn{margin-left:auto}
   .modal-body{padding:18px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;min-height:0}
-  .field label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  /* `>` e não descendente: os cartões de papel também são <label> e moram dentro
+     de um .field. Sem isto herdavam o text-transform e a legenda de cada papel
+     saía gritando em maiúsculas. Mesma armadilha do seletor largo que já mordeu
+     na lista de mudanças pendentes. */
+  .field>label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
     color:var(--faint);margin-bottom:6px}
-  .field input{width:100%;background:var(--inset);border:1px solid var(--line);border-radius:9px;
-    padding:10px 12px;color:var(--fg);font-family:"JetBrains Mono",monospace;font-size:13px;outline:none}
-  .field input:focus{border-color:var(--grass-lo);box-shadow:0 0 0 3px rgba(109,175,67,.1)}
+  .field input,.field select{width:100%;background-color:var(--inset);border:1px solid var(--line);
+    border-radius:9px;padding:10px 12px;color:var(--fg);
+    font-family:"JetBrains Mono",monospace;font-size:13px;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--grass-lo);box-shadow:0 0 0 3px rgba(109,175,67,.1)}
+  .field input::placeholder{color:var(--faint)}
+  /* campo travado (o nome de quem já existe) precisa PARECER travado, senão o
+     clique sem efeito passa por defeito da tela */
+  .field input:disabled{background-color:#0B0E12;color:var(--dim);cursor:not-allowed}
+  .field .ajuda{font-size:11px;color:var(--faint);margin-top:6px}
+
+  /* O select é a única peça que o navegador desenhava por conta própria: em tema
+     escuro ele voltava branco, com a fonte do sistema e altura maior que a do
+     campo ao lado — era o que parecia quebrado no modal de usuário.
+     `appearance:none` apaga o desenho dele e a seta passa a ser nossa. Como
+     `background` (atalho) apagaria a seta, quem estiliza select usa
+     `background-color`. */
+  select{appearance:none;-webkit-appearance:none;font:inherit;cursor:pointer;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393A2B1' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:15px;
+    padding-right:30px}
+  /* a lista aberta é desenhada pelo sistema, não por nós: dá pra pedir o tom, não o formato */
+  select option{background:var(--elev);color:var(--fg)}
+
+  /* escolha de papel: três cartões em vez de um select. O papel é a decisão que
+     mais precisa de explicação na tela — num select, a descrição só aparece
+     depois de abrir, e some ao escolher. */
+  .pick{display:grid;gap:7px}
+  .pick label{display:block;cursor:pointer;text-transform:none;letter-spacing:0;
+    font-size:13px;color:var(--fg);margin:0}
+  .pick input{position:absolute;opacity:0;width:0;height:0}
+  .pick .op{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--line-soft);background:var(--inset);transition:border-color .14s,background .14s}
+  .pick label:hover .op{border-color:var(--line)}
+  .pick .mk{width:16px;height:16px;flex:none;margin-top:2px;border-radius:50%;
+    border:1.5px solid var(--faint);display:grid;place-items:center;transition:border-color .14s}
+  .pick .mk::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--grass);
+    transform:scale(0);transition:transform .16s cubic-bezier(.3,1.5,.6,1)}
+  .pick .tx{min-width:0}
+  .pick .tx b{display:block;font-size:13px;font-weight:600}
+  .pick .tx i{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:1px}
+  .pick input:checked+.op{border-color:var(--grass-lo);background:rgba(109,175,67,.07)}
+  .pick input:checked+.op .mk{border-color:var(--grass)}
+  .pick input:checked+.op .mk::after{transform:scale(1)}
+  .pick input:focus-visible+.op{outline:2px solid var(--xp);outline-offset:2px}
+
+  /* Identidade de quem usa o PAINEL — não é jogador, não tem skin.
+     Monograma com tom sorteado do nome: distingue as linhas da lista sem
+     mandar os nomes de usuário para um serviço de terceiros. */
+  .ident{width:32px;height:32px;flex:none;border-radius:9px;display:grid;place-items:center;
+    font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:13.5px;line-height:1;
+    background:hsl(var(--h,210) 26% 19%);color:hsl(var(--h,210) 55% 66%);
+    border:1px solid hsl(var(--h,210) 24% 30%);text-transform:uppercase}
   .modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px 18px;flex:none;
     border-top:1px solid var(--line-soft);background:var(--elev)}
   .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--line)}
@@ -621,8 +681,10 @@
 
   /* ---------- mods ---------- */
   .mods-acoes{display:flex;align-items:center;gap:9px;flex:none}
-  .mods-filtro{width:210px;background:var(--inset);border:1px solid var(--line);border-radius:9px;
+  /* `background-color`, não `background`: o atalho apagaria a seta que o select ganha acima */
+  .mods-filtro{width:210px;background-color:var(--inset);border:1px solid var(--line);border-radius:9px;
     padding:7px 11px;color:var(--fg);font-size:12.5px;outline:none}
+  select.mods-filtro{padding-right:28px;background-position:right 8px center}
   .mods-filtro:focus{border-color:var(--grass-lo)}
   .mods-filtro::placeholder{color:var(--faint)}
   .mods-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
@@ -756,6 +818,43 @@
   .papel.operador{background:rgba(126,196,64,.14);color:var(--grass)}
   .papel.leitor{background:var(--elev-2);color:var(--faint)}
 
+  /* Quem tem acesso: coluna única, não a grade de cartões que era usada antes.
+     Uma lista de permissões se compara de cima pra baixo — em duas colunas os
+     papéis ficavam lado a lado e o olho tinha que ziguezaguear pra achar quem
+     era admin. */
+  .ulist{display:flex;flex-direction:column;gap:7px}
+  .urow{display:flex;align-items:center;gap:12px;padding:10px 13px;min-width:0;
+    border:1px solid var(--line-soft);border-radius:11px;background:var(--elev);
+    transition:border-color .14s}
+  .urow:hover{border-color:var(--line)}
+  .urow-tx{min-width:0;flex:1}
+  .urow-nome{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:7px;min-width:0}
+  /* O nome vai num <span> próprio, e não solto na linha: texto sem elemento
+     dentro de um flex vira item anônimo, e item anônimo não aceita
+     `text-overflow` — o nome longo era cortado a seco, sem as reticências.
+     É a mesma pegadinha da lista de mudanças pendentes. */
+  .urow-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* o selo "você" nunca encolhe: quem cede espaço é o nome */
+  .urow-eu{flex:none;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .urow-sub{font-size:11.5px;color:var(--faint);font-family:"JetBrains Mono",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .urow-act{display:flex;gap:6px;flex:none}
+  .urow-fixo{font-size:11px;color:var(--dim);font-family:"JetBrains Mono",monospace;
+    border:1px dashed var(--line);border-radius:7px;padding:3px 8px;white-space:nowrap}
+
+  @media (max-width:620px){
+    /* em 375px o nome tinha 90px entre o monograma e os dois botões; aqui a linha
+       vira duas fileiras e as ações descem para a segunda, com largura de sobra */
+    .urow{display:grid;grid-template-columns:auto 1fr auto;
+      grid-template-areas:"id tx papel" "act act act";gap:9px 11px}
+    .urow .ident{grid-area:id}
+    .urow-tx{grid-area:tx}
+    .urow .papel{grid-area:papel;align-self:center}
+    .urow-act{grid-area:act;justify-content:flex-end}
+    .urow-fixo{margin-left:auto}
+  }
+
   @media (max-width:620px){
     .evrow{grid-template-columns:1fr auto;gap:4px 10px}
     .ev-quem{grid-column:1}
@@ -782,6 +881,12 @@
   }
 
   .tabbar{display:none}
+  /* peças que só existem onde a sidebar não existe */
+  .so-mobile{display:none}
+  .conta-cel{display:flex;align-items:center;gap:12px}
+  .conta-tx{flex:1;min-width:0}
+  .conta-nome{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conta-cel .btn{flex:none}
 
   /* ---------- tolerância de altura (só desktop) ----------
      A visão geral cabe exatamente numa tela, então toda a diferença entre 1920x1080
@@ -822,6 +927,7 @@
   @media (max-width:920px){
     .app{grid-template-columns:1fr}
     .side{display:none}
+    .so-mobile{display:block}
     .top-stats{display:none}
     .add-srv{width:36px;padding:0;justify-content:center}
     .add-srv span{display:none}
@@ -847,6 +953,11 @@
     .stat.tps .sub{white-space:normal;overflow:visible}
     /* botão de adicionar servidor: presente, mas sem competir com o resto */
     .add-srv{background:var(--elev-2);border-color:var(--line);color:var(--dim)}
+    /* Dentro de um card o botão fica com o nome: encolher pra 36px faz sentido na
+       barra do topo, onde o "+" mora ao lado do nome do servidor e o contexto é
+       óbvio. Aqui era "Novo usuário" espremido em 36px, transbordando o card. */
+    .card-head .add-srv{width:auto;padding:0 12px;height:32px;font-size:12px}
+    .card-head .add-srv span{display:inline}
 
     .modgrid{grid-template-columns:1fr 1fr;gap:8px}
     /* energia são três botões: em 2 colunas o "Iniciar" ficava órfão numa linha só pra ele */
@@ -1042,14 +1153,15 @@
       </div>
     </nav>
     <div class="side-foot">
-      <!-- ícone em vez de avatar: quem entra no painel é uma conta de administração,
-           não tem skin nem foto — o quadrado vazio de antes só parecia imagem quebrada -->
-      <div class="av">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-          <circle cx="12" cy="8.4" r="3.6"/><path d="M4.8 20c0-3.6 3.2-6.1 7.2-6.1s7.2 2.5 7.2 6.1"/>
-        </svg>
-      </div>
+      <!-- monograma, não skin: quem entra no painel é conta de painel, não jogador.
+           A cor sai do próprio nome, então a linha muda de cara conforme quem entrou. -->
+      <span class="ident" id="quem-ident">–</span>
       <div class="quem" id="quem-sou">–<span id="quem-papel">–</span></div>
+      <button class="icon-btn sair" id="sair" title="Sair do painel" aria-label="Sair do painel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>
+        </svg>
+      </button>
     </div>
   </aside>
 
@@ -1523,6 +1635,23 @@
             <button class="btn sec" data-goto="atividade">Abrir</button>
           </div>
         </div>
+
+        <!-- No celular a sidebar não existe, e com ela sumiam as duas únicas coisas
+             que dizem quem está usando o painel: o nome e a porta de saída. -->
+        <div class="card so-mobile">
+          <div class="card-body conta-cel">
+            <span class="ident" id="conta-ident">–</span>
+            <div class="conta-tx">
+              <div class="conta-nome" id="conta-nome">–</div>
+              <div class="hint" style="margin:1px 0 0">Entrou como <span id="conta-papel">–</span></div>
+            </div>
+            <button class="btn sec" id="sair-cel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;vertical-align:-2px;margin-right:5px">
+                <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>
+              </svg>Sair
+            </button>
+          </div>
+        </div>
       </section>
 
       <!-- ===== ATIVIDADE (só admin) ===== -->
@@ -1557,15 +1686,14 @@
               <div class="card-title">Quem tem acesso</div>
               <button class="add-srv" id="user-add">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                Novo usuário
+                <span>Novo usuário</span>
               </button>
             </div>
             <div class="card-body">
-              <div class="listgrid" id="user-lista"></div>
+              <div class="ulist" id="user-lista"></div>
               <div class="hint" style="margin-top:14px">
-                <b>admin</b> faz tudo, inclusive mexer em mods, restaurar o mundo e gerir usuários ·
-                <b>operador</b> toca o dia a dia (chat, expulsar, banir, whitelist, baixar backup) ·
-                <b>leitor</b> só acompanha.
+                Tirar o acesso vale na hora: quem for removido ou rebaixado perde o poder
+                na requisição seguinte, sem esperar a sessão vencer.
               </div>
             </div>
           </div>
@@ -1746,19 +1874,33 @@
 <div class="overlay" id="usermodal">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Usuário">
     <div class="modal-head">
-      <h3 id="um-titulo">Novo usuário</h3>
+      <span class="ident" id="um-ident">+</span>
+      <div class="mh-tx">
+        <h3 id="um-titulo">Novo usuário</h3>
+        <div class="mh-sub" id="um-sub">Quem tem acesso ao painel, e até onde</div>
+      </div>
       <button class="icon-btn" id="um-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="modal-body">
-      <div class="field"><label>Usuário</label><input id="um-user" autocomplete="off" placeholder="ex.: olipalitos"></div>
-      <div class="field"><label id="um-senha-label">Senha</label>
-        <input id="um-senha" type="password" autocomplete="new-password" placeholder="pelo menos 8 caracteres"></div>
+      <div class="field"><label for="um-user">Usuário</label>
+        <input id="um-user" autocomplete="off" placeholder="ex.: olipalitos">
+        <div class="ajuda" id="um-user-ajuda">É o nome de entrada no painel — não precisa ser o nick do jogo.</div>
+      </div>
+      <div class="field"><label id="um-senha-label" for="um-senha">Senha</label>
+        <input id="um-senha" type="password" autocomplete="new-password" placeholder="pelo menos 8 caracteres">
+      </div>
       <div class="field"><label>Papel</label>
-        <select id="um-papel">
-          <option value="leitor">leitor — só acompanha</option>
-          <option value="operador">operador — chat, expulsar, banir, whitelist</option>
-          <option value="admin">admin — tudo, inclusive mods e usuários</option>
-        </select>
+        <div class="pick" id="um-papel" role="radiogroup" aria-label="Papel">
+          <label><input type="radio" name="um-papel" value="leitor">
+            <span class="op"><span class="mk"></span><span class="tx">
+              <b>Leitor</b><i>Só acompanha: vê tudo, não muda nada.</i></span></span></label>
+          <label><input type="radio" name="um-papel" value="operador">
+            <span class="op"><span class="mk"></span><span class="tx">
+              <b>Operador</b><i>O dia a dia: chat, expulsar, banir, whitelist, baixar backup.</i></span></span></label>
+          <label><input type="radio" name="um-papel" value="admin">
+            <span class="op"><span class="mk"></span><span class="tx">
+              <b>Admin</b><i>Tudo, inclusive mods, restaurar o mundo, console e usuários.</i></span></span></label>
+        </div>
       </div>
       <div class="banner off" id="um-erro" style="display:none"></div>
     </div>
@@ -1938,10 +2080,26 @@
     showGate();
   }
 
-  /** Quem está logado, no rodapé da barra lateral. */
+  /**
+   * Quem está logado: rodapé da barra lateral no desktop, e o card da aba
+   * Servidor no celular — onde a barra lateral não existe.
+   */
   function renderQuemSou() {
-    $("quem-sou").firstChild.textContent = usuario || "–";
+    const nome = usuario || "–";
+    $("quem-sou").firstChild.textContent = nome;
+    $("conta-nome").textContent = nome;
+    for (const id of ["quem-ident", "conta-ident"]) {
+      const el = $(id);
+      el.textContent = nome.trim().charAt(0) || "–";
+      el.style.setProperty("--h", hueDe(nome));
+    }
   }
+
+  // Sair é barato e reversível — basta entrar de novo. Não vale um modal de
+  // confirmação; vale não deixar o painel aberto num celular que passa de mão.
+  const sair = () => { toast("você saiu do painel"); logout(); };
+  $("sair").onclick = sair;
+  $("sair-cel").onclick = sair;
 
   $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1994,11 +2152,24 @@
     return `${s}s`;
   }
 
-  function avatarColor(nick) {
+  function hueDe(nome) {
     let h = 0;
-    for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) % 360;
-    return `hsl(${h} 32% 38%)`;
+    for (let i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) % 360;
+    return h;
   }
+
+  const avatarColor = (nick) => `hsl(${hueDe(nick)} 32% 38%)`;
+
+  /**
+   * Identidade de quem usa o PAINEL — de propósito diferente do avatar de jogador.
+   *
+   * Conta de painel não é conta da Mojang: pedir a skin dela ao mc-heads dava a
+   * cara de outra pessoa a quem tivesse nome parecido com o de um jogador, e um
+   * quadrado vazio para o resto. Também mandava os nomes de usuário do painel
+   * para um site de fora, um a um, a cada abertura da lista.
+   */
+  const identidade = (nome) => `<span class="ident" style="--h:${hueDe(nome)}" aria-hidden="true">` +
+    `${esc((nome || "?").trim().charAt(0) || "?")}</span>`;
 
   // a cabeça vem do mc-heads, buscada pelo próprio navegador. Sem internet aqui
   // (ou nick que não existe na Mojang) o onerror tira a imagem e sobra o bloco colorido.
@@ -2461,7 +2632,10 @@
     const admin = souAdmin();
     // o rótulo ao lado do nome dizia "admin" fixo no HTML: para um operador,
     // era o painel afirmando um poder que ele não tem
-    if (st?.eu?.papel) $("quem-papel").textContent = st.eu.papel;
+    if (st?.eu?.papel) {
+      $("quem-papel").textContent = st.eu.papel;
+      $("conta-papel").textContent = st.eu.papel;
+    }
     $("nav-atividade").style.display = admin ? "" : "none";
     $("atalho-atividade").style.display = admin ? "" : "none";
     // se um leitor estava com a aba aberta e foi rebaixado, tira ele de lá
@@ -2509,18 +2683,34 @@
       const d = await apiRaiz("/usuarios");
       usuariosCache = d.usuarios || [];
       $("ativ-n-users").textContent = usuariosCache.length;
-      $("user-lista").innerHTML = usuariosCache.map((u) => {
+      // admin primeiro, depois em ordem de nome: a lista de acesso se lê de cima
+      // pra baixo por quanto poder cada um tem
+      const ordem = { admin: 0, operador: 1, leitor: 2 };
+      const lista = [...usuariosCache].sort((a, b) =>
+        (ordem[a.papel] ?? 9) - (ordem[b.papel] ?? 9) || a.user.localeCompare(b.user));
+
+      $("user-lista").innerHTML = lista.map((u) => {
         const eu = u.user === d.eu;
         // o admin do .env não mora no arquivo: não dá para editar nem remover por aqui
         const acoes = u.doEnv
-          ? `<span class="hint" style="margin:0">vem do .env</span>`
+          ? `<span class="urow-fixo" title="Definido em ADMIN_USER, no .env do painel">vem do .env</span>`
           : `<button class="mini" data-user-edit="${esc(u.user)}">Editar</button>` +
             (eu ? "" : `<button class="mini ban" data-user-rm="${esc(u.user)}">Remover</button>`);
-        return `<div class="listrow">
-          ${avatar(u.user)}
-          <div class="txt pname">${esc(u.user)}${eu ? " <span class=\"hint\" style=\"margin:0\">(você)</span>" : ""}</div>
+
+        const visto = u.doEnv
+          ? "chave-mestra do painel"
+          : u.ultimoAcesso
+            ? `entrou ${quando(new Date(u.ultimoAcesso).getTime())}`
+            : "nunca entrou";
+
+        return `<div class="urow">
+          ${identidade(u.user)}
+          <div class="urow-tx">
+            <div class="urow-nome"><span class="urow-n">${esc(u.user)}</span>${eu ? `<span class="urow-eu">você</span>` : ""}</div>
+            <div class="urow-sub">${esc(visto)}</div>
+          </div>
           <span class="papel ${esc(u.papel)}">${esc(u.papel)}</span>
-          <div class="act">${acoes}</div>
+          <div class="urow-act">${acoes}</div>
         </div>`;
       }).join("");
     } catch (err) {
@@ -2545,15 +2735,35 @@
 
   let editando = null;
 
+  /** O papel escolhido nos cartões — o mesmo contrato que o `.value` do select tinha. */
+  const papelEscolhido = () => $("usermodal").querySelector('input[name="um-papel"]:checked')?.value || "leitor";
+  const marcarPapel = (v) => {
+    const alvo = $("usermodal").querySelector(`input[name="um-papel"][value="${v}"]`)
+      || $("usermodal").querySelector('input[name="um-papel"]');
+    alvo.checked = true;
+  };
+
   function abrirUsuario(user) {
     editando = user || null;
     const u = user ? usuariosCache.find((x) => x.user === user) : null;
-    $("um-titulo").textContent = user ? `Editar ${user}` : "Novo usuário";
+
+    $("um-titulo").textContent = user ? user : "Novo usuário";
+    $("um-sub").textContent = user
+      ? "Trocar o papel, ou definir uma senha nova"
+      : "Quem tem acesso ao painel, e até onde";
+    // o monograma mostra de quem é a ficha antes de ler o nome; no cadastro novo
+    // ele é só o "+" neutro do cabeçalho
+    const ident = $("um-ident");
+    ident.textContent = user ? user.trim().charAt(0) : "+";
+    ident.style.setProperty("--h", user ? hueDe(user) : 210);
+
     $("um-user").value = user || "";
     $("um-user").disabled = Boolean(user);
+    $("um-user-ajuda").style.display = user ? "none" : "";
     $("um-senha").value = "";
-    $("um-senha-label").textContent = user ? "Nova senha (deixe vazio para manter)" : "Senha";
-    $("um-papel").value = u?.papel || "leitor";
+    $("um-senha").placeholder = user ? "deixe vazio para manter a atual" : "pelo menos 8 caracteres";
+    $("um-senha-label").textContent = user ? "Nova senha" : "Senha";
+    marcarPapel(u?.papel || "leitor");
     $("um-erro").style.display = "none";
     $("usermodal").classList.add("open");
     setTimeout(() => $(user ? "um-senha" : "um-user").focus(), 60);
@@ -2563,13 +2773,22 @@
   $("um-x").onclick = fecharUsuario;
   $("um-cancelar").onclick = fecharUsuario;
   $("user-add").onclick = () => abrirUsuario(null);
+  // clicar no fundo fecha, como nos outros modais — e só no fundo, senão arrastar
+  // uma seleção de dentro pra fora fechava a janela no meio do preenchimento
+  $("usermodal").onclick = (e) => { if (e.target === $("usermodal")) fecharUsuario(); };
+  // Enter salva: são três campos, ninguém quer ir de Tab até o botão
+  $("usermodal").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("um-salvar").click(); }
+  });
 
   $("um-salvar").onclick = async () => {
     const user = $("um-user").value.trim();
     const senha = $("um-senha").value;
-    const papel = $("um-papel").value;
+    const papel = papelEscolhido();
     const erro = $("um-erro");
     erro.style.display = "none";
+    const btn = $("um-salvar");
+    btn.disabled = true;
     try {
       if (editando) {
         const corpo = { papel };
@@ -2585,6 +2804,8 @@
     } catch (err) {
       erro.textContent = err.message;
       erro.style.display = "";
+    } finally {
+      btn.disabled = false;
     }
   };
 
@@ -4257,9 +4478,13 @@
   $("modalClose").onclick = () => overlay.classList.remove("open");
   $("modalCancel").onclick = () => overlay.classList.remove("open");
   overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.remove("open"); };
+  // Esc fecha o que estiver aberto. Antes só alcançava dois dos quatro modais:
+  // no de usuário e no de mods, a tecla não fazia nada e só o X servia.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     overlay.classList.remove("open");
+    $("usermodal").classList.remove("open");
+    $("addmod").classList.remove("open");
     if ($("ask").classList.contains("open")) closeAsk(null);
   });
 
