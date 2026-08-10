@@ -44,29 +44,56 @@ export const podeMais = (papel, minimo) => (FORCA[papel] || 0) >= (FORCA[minimo]
 // arquivo não vira lista de senhas. Os parâmetros vão junto no hash para que
 // aumentar o custo no futuro não invalide o que já está gravado.
 const N = 16384, R = 8, P = 1, KEYLEN = 32;
+const MAXMEM = 256 * 1024 * 1024; // precisa acompanhar N: o padrão de 32 MB estoura
 
+/**
+ * Assíncrono, e não `scryptSync`.
+ *
+ * Medido nesta máquina: **48 ms por chamada**. O painel é um processo só, que no
+ * mesmo laço atende o polling de 2 s de cada aba aberta — cada tentativa de login
+ * congelava tudo por 48 ms. Aqui o cálculo sai para a threadpool e o laço segue
+ * respondendo.
+ */
 function derivar(senha, salt, n = N, r = R, p = P) {
-  // maxmem precisa acompanhar N: o padrão de 32 MB estoura com N alto
-  return crypto.scryptSync(String(senha), salt, KEYLEN, { N: n, r, p, maxmem: 256 * 1024 * 1024 });
+  return new Promise((ok, falhou) => {
+    crypto.scrypt(String(senha), salt, KEYLEN, { N: n, r, p, maxmem: MAXMEM }, (err, dk) => {
+      if (err) falhou(err); else ok(dk);
+    });
+  });
 }
 
-export function hashSenha(senha) {
+export async function hashSenha(senha) {
   const salt = crypto.randomBytes(16);
-  const dk = derivar(senha, salt);
+  const dk = await derivar(senha, salt);
   return `scrypt$${N}$${R}$${P}$${salt.toString("base64")}$${dk.toString("base64")}`;
 }
 
-export function conferirSenha(senha, guardado) {
+export async function conferirSenha(senha, guardado) {
   try {
     const [alg, n, r, p, salt, dk] = String(guardado).split("$");
     if (alg !== "scrypt") return false;
     const esperado = Buffer.from(dk, "base64");
-    const obtido = derivar(senha, Buffer.from(salt, "base64"), Number(n), Number(r), Number(p));
+    const obtido = await derivar(senha, Buffer.from(salt, "base64"), Number(n), Number(r), Number(p));
     return esperado.length === obtido.length && crypto.timingSafeEqual(esperado, obtido);
   } catch {
     return false;
   }
 }
+
+/**
+ * Um hash de verdade, de uma senha aleatória que ninguém conhece, para conferir
+ * contra quando a conta **não existe**.
+ *
+ * Sem isto, o login respondia em 0,3 ms para nome inexistente e 48 ms para nome
+ * que existe — medido, 160× de diferença. Dava para varrer nomes de usuário sem
+ * acertar senha nenhuma. Pagando o mesmo custo nos dois casos, a resposta deixa
+ * de contar quem tem conta aqui.
+ *
+ * Calculado uma vez, na primeira necessidade, e guardado como promessa: duas
+ * tentativas simultâneas antes da primeira terminar reaproveitam a mesma conta.
+ */
+let promessaFantasma = null;
+const hashFantasma = () => (promessaFantasma ??= hashSenha(crypto.randomBytes(24).toString("hex")));
 
 /** Compara em tempo constante — o mesmo cuidado que o login do env já tinha. */
 function mesmoTexto(a, b) {
@@ -123,6 +150,29 @@ export function criar({ dados, log }) {
 
   const achar = (user) => ler().find((u) => u.user.toLowerCase() === String(user || "").toLowerCase());
 
+  /**
+   * Uma escrita por vez, na ordem de chegada.
+   *
+   * Enquanto o scrypt era síncrono, `ler()` → hash → `gravar()` corria inteiro
+   * sem soltar o laço, e nada podia se intercalar. Com o hash assíncrono existe
+   * um `await` no meio dessa sequência: dois pedidos ao mesmo tempo leriam a
+   * mesma lista e o segundo `gravar()` apagaria o trabalho do primeiro — criar
+   * dois usuários de uma vez deixaria só um.
+   *
+   * Tornar o hash assíncrono e serializar a escrita são a mesma mudança; separar
+   * as duas seria trocar 48 ms de travamento por perda silenciosa de dado.
+   *
+   * Só as escritas entram aqui. Leitura não precisa de vez, e **nada que já está
+   * na fila pode entrar nela de novo** — seria esperar por si mesmo.
+   */
+  let fila = Promise.resolve();
+  function emFila(tarefa) {
+    const resultado = fila.then(tarefa);
+    // a fila não pode quebrar quando uma tarefa falha: a próxima ainda tem que rodar
+    fila = resultado.then(() => {}, () => {});
+    return resultado;
+  }
+
   /* ---------------- consulta ---------------- */
 
   const ehAdminDoEnv = (user) => Boolean(ENV_PASSWORD) && mesmoTexto(user ?? "", ENV_USER);
@@ -137,14 +187,21 @@ export function criar({ dados, log }) {
     return achar(user)?.papel || null;
   }
 
-  /** Confere as credenciais. Devolve `{ user, papel }` ou `null`. */
-  function autenticar(user, senha) {
+  /**
+   * Confere as credenciais. Devolve `{ user, papel }` ou `null`.
+   *
+   * O scrypt roda **sempre**, exista a conta ou não: contra o hash guardado, ou
+   * contra o fantasma. É o que faz o tempo de resposta parar de dizer quem tem
+   * conta no painel.
+   */
+  async function autenticar(user, senha) {
     if (ehAdminDoEnv(user) && mesmoTexto(senha ?? "", ENV_PASSWORD)) {
       return { user: ENV_USER, papel: "admin" };
     }
     const u = achar(user);
-    if (u && conferirSenha(senha ?? "", u.hash)) {
-      marcarAcesso(u.user);
+    const confere = await conferirSenha(senha ?? "", u?.hash ?? (await hashFantasma()));
+    if (u && confere) {
+      await emFila(() => marcarAcesso(u.user));
       return { user: u.user, papel: u.papel };
     }
     return null;
@@ -186,22 +243,26 @@ export function criar({ dados, log }) {
     return v;
   }
 
-  function adicionar({ user, senha, papel }, porQuem) {
+  // As três entram inteiras na fila: a checagem e a gravação que ela autoriza
+  // precisam ser um bloco só. Validar fora da fila deixaria a brecha de dois
+  // pedidos passarem pela mesma checagem antes de qualquer um gravar.
+
+  const adicionar = ({ user, senha, papel }, porQuem) => emFila(async () => {
     const nome = validarNome(user);
     if (!papelValido(papel)) throw erro("papel inválido");
     const novo = {
       user: nome,
       papel,
-      hash: hashSenha(validarSenha(senha)),
+      hash: await hashSenha(validarSenha(senha)),
       criadoEm: new Date().toISOString(),
       criadoPor: porQuem || null,
       ultimoAcesso: null,
     };
     gravar([...ler(), novo]);
     return { user: novo.user, papel: novo.papel };
-  }
+  });
 
-  function alterar(user, { senha, papel }, porQuem) {
+  const alterar = (user, { senha, papel }, porQuem) => emFila(async () => {
     const alvo = achar(user);
     if (!alvo) throw erro("usuário não encontrado", 404);
     if (papel !== undefined && !papelValido(papel)) throw erro("papel inválido");
@@ -215,20 +276,20 @@ export function criar({ dados, log }) {
     const atualizado = {
       ...alvo,
       ...(papel ? { papel } : {}),
-      ...(senha !== undefined ? { hash: hashSenha(validarSenha(senha)) } : {}),
+      ...(senha !== undefined ? { hash: await hashSenha(validarSenha(senha)) } : {}),
     };
     gravar(ler().map((u) => (u.user === alvo.user ? atualizado : u)));
     return { user: atualizado.user, papel: atualizado.papel };
-  }
+  });
 
-  function remover(user, porQuem) {
+  const remover = (user, porQuem) => emFila(async () => {
     const alvo = achar(user);
     if (!alvo) throw erro("usuário não encontrado", 404);
     if (mesmoTexto(alvo.user, porQuem || "")) throw erro("você não pode remover a si mesmo", 409);
     if (alvo.papel === "admin") exigirOutroAdmin(alvo.user);
     gravar(ler().filter((u) => u.user !== alvo.user));
     return { user: alvo.user, removido: true };
-  }
+  });
 
   /**
    * Impede ficar sem administrador. O admin do `.env` conta como saída de
@@ -240,6 +301,10 @@ export function criar({ dados, log }) {
     const outros = ler().filter((u) => u.papel === "admin" && u.user !== exceto);
     if (!outros.length) throw erro("este é o último administrador — promova outro antes", 409);
   }
+
+  // Calcula o fantasma agora, em segundo plano, para que a primeira tentativa de
+  // login contra um nome inexistente já custe o mesmo que as seguintes.
+  hashFantasma().catch(() => {});
 
   return { autenticar, papelDe, listar, adicionar, alterar, remover, ehAdminDoEnv, arquivo: ARQUIVO };
 }

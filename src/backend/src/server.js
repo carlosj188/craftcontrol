@@ -76,7 +76,7 @@ app.post("/api/auth/login", async (req, reply) => {
   const ip = req.ip;
   if (tooManyAttempts(ip)) return reply.code(429).send({ error: "muitas tentativas, espere 15 min" });
   const { user, password } = req.body ?? {};
-  const conta = usuarios.autenticar(user, password);
+  const conta = await usuarios.autenticar(user, password);
   if (!conta) {
     registerFailure(ip);
     // guarda a tentativa com o nome digitado, que é o que denuncia acesso indevido
