@@ -694,17 +694,24 @@
   /* banner com botão dentro — pendência de reinício, progresso do aplicar e
      atualizações disponíveis usam o mesmo formato */
   /* o que exatamente espera o reinício, dentro do próprio aviso */
-  .mud-lista{list-style:none;margin:9px 0 0;padding:0;display:grid;gap:4px;
-    grid-template-columns:repeat(auto-fill,minmax(210px,1fr));width:100%}
+  /* flex em vez de grid: com 2 mudanças o grid abria 6 colunas fixas e espremia
+     os nomes à toa. Assim cada item ocupa o que precisa e quebra linha sozinho. */
+  .mud-lista{list-style:none;margin:9px 0 0;padding:0;display:flex;flex-wrap:wrap;
+    gap:5px 20px;width:100%}
+  /* o nome é um span próprio: nó de texto solto dentro de flex não recebe
+     ellipsis, e o nome sumia cortado no meio da palavra */
   .mud-lista li{font-size:12px;color:var(--dim);display:flex;gap:7px;align-items:baseline;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    min-width:0;max-width:100%;flex:0 0 auto}
+  .mud-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .mud-acao{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);
     flex:none;font-weight:600}
   .mud-mais{color:var(--faint);font-style:italic}
 
   .banner.mods-pend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
     background:rgba(224,179,65,.1);border-color:rgba(224,179,65,.3);color:var(--amber)}
-  .banner.mods-pend span{flex:1;min-width:200px}
+  /* só o filho direto: sem o `>`, esta regra alcançava também os spans da lista
+     de mudanças e fazia "removido" e o nome do mod dividirem a largura em dois */
+  .banner.mods-pend > span{flex:1;min-width:200px}
   .banner.mods-pend .btn{flex:none;padding:7px 14px;font-size:12.5px}
   @media (max-width:920px){
     .mods-acoes{width:100%}
@@ -2616,7 +2623,8 @@
     if (!mudancas?.length) return "";
     const linhas = mudancas.slice(-8).map((m) => {
       const nome = String(m.arquivo || "").replace(/\.jar$/i, "");
-      return `<li><span class="mud-acao">${esc(ACAO_NOME[m.acao] || m.acao)}</span> ${esc(nome)}</li>`;
+      return `<li title="${esc(nome)}"><span class="mud-acao">${esc(ACAO_NOME[m.acao] || m.acao)}</span>` +
+        `<span class="mud-nome">${esc(nome)}</span></li>`;
     }).join("");
     const resto = mudancas.length > 8 ? `<li class="mud-mais">e mais ${mudancas.length - 8}</li>` : "";
     return `<ul class="mud-lista">${linhas}${resto}</ul>`;
