@@ -79,10 +79,27 @@ const REGRAS = [
     resumo: (r, m) => `descartou o mundo preservado ${decodeURIComponent(m[1])}` },
 
   // ---- backup ----
+  /**
+   * O pedido diz como a configuração **fica**, não o que ela era antes: salvar
+   * uma agenda já ligada manda `ativo: true` igual a ligar do zero, e salvar só
+   * a quantidade de cópias não manda `ativo` nenhum.
+   *
+   * Por isso o resumo descreve o estado resultante e nunca uma transição que ele
+   * não tem como conferir. Antes, mudar a hora de um backup já ligado gravava
+   * "ligou o backup automático" — uma frase que afirma algo que não aconteceu, e
+   * histórico que afirma o que não houve não serve para nada.
+   */
   { m: "PUT", re: `^${S}/backup/auto$`, papel: "admin", acao: "backup.auto",
-    resumo: (r) => (r.body?.ativo === false
-      ? "desligou o backup automático"
-      : `ligou o backup automático${r.body?.hora ? ` às ${txt(r.body.hora, 5)}` : ""}`) },
+    resumo: (r) => {
+      const b = r.body ?? {};
+      if (b.ativo === false) return "desligou o backup automático";
+      const det = [
+        b.hora ? `às ${txt(b.hora, 5)}` : null,
+        b.manter ? `guardando ${Number(b.manter)}` : null,
+      ].filter(Boolean).join(", ");
+      const alvo = `backup automático${det ? ` (${det})` : ""}`;
+      return b.ativo === true ? `deixou o ${alvo} ligado` : `mudou a configuração do ${alvo}`;
+    } },
   { m: "POST", re: `^${S}/backup/auto/agora$`, papel: "admin", acao: "backup.agora",
     resumo: () => "disparou um backup na hora" },
   { m: "DELETE", re: `^${S}/backup/arquivos/([^/]+)$`, papel: "admin", acao: "backup.apagar",
@@ -96,10 +113,14 @@ const REGRAS = [
   // ---- energia e agenda ----
   { m: "POST", re: `^${S}/power/([^/]+)$`, papel: "admin", acao: "power",
     resumo: (r, m) => `mandou ${decodeURIComponent(m[1])} no servidor` },
+  // mesma regra do backup automático acima: estado resultante, nunca transição
   { m: "PUT", re: `^${S}/agenda$`, papel: "admin", acao: "agenda.definir",
-    resumo: (r) => (r.body?.ativo === false
-      ? "desligou o reinício agendado"
-      : `ligou o reinício agendado${r.body?.hora ? ` às ${txt(r.body.hora, 5)}` : ""}`) },
+    resumo: (r) => {
+      const b = r.body ?? {};
+      if (b.ativo === false) return "desligou o reinício agendado";
+      const alvo = `reinício agendado${b.hora ? ` das ${txt(b.hora, 5)}` : ""}`;
+      return b.ativo === true ? `deixou o ${alvo} ligado` : `mudou a configuração do ${alvo}`;
+    } },
   { m: "POST", re: `^${S}/agenda/pular$`, papel: "admin", acao: "agenda.pular",
     resumo: () => "pulou o próximo reinício agendado" },
 
@@ -120,10 +141,13 @@ const REGRAS = [
     resumo: (r) => `pôs ${txt(r.body?.nick)} na whitelist` },
   { m: "DELETE", re: `^${S}/whitelist/([^/]+)$`, papel: "operador", acao: "whitelist.rm",
     resumo: (r, m) => `tirou ${decodeURIComponent(m[1])} da whitelist` },
+  // `message`, e não `text`: é o nome que o painel manda e que a rota lê. Com o
+  // campo errado, toda mensagem entrava no histórico como "falou no chat: null"
+  // — a ação ficava registrada e o conteúdo dela se perdia.
   { m: "POST", re: `^${S}/chat/broadcast$`, papel: "operador", acao: "chat",
-    resumo: (r) => `falou no chat: ${txt(r.body?.text, 120)}` },
+    resumo: (r) => `falou no chat: ${txt(r.body?.message, 120)}` },
   { m: "POST", re: `^${S}/chat/private$`, papel: "operador", acao: "chat.privado",
-    resumo: (r) => `mandou mensagem para ${txt(r.body?.nick)}` },
+    resumo: (r) => `mandou para ${txt(r.body?.nick)}: ${txt(r.body?.message, 120)}` },
 ].map((x) => ({ ...x, re: new RegExp(x.re) }));
 
 /**
