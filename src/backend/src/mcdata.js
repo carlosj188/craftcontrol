@@ -328,5 +328,46 @@ export function criar({ dados, versaoPadrao = null }) {
     }, intervalMs).unref();
   }
 
-  return { bans, whitelist, properties, startedAt, chatHistory, version, plataforma, tail };
+  /**
+   * Reescreve chaves do `server.properties` preservando o resto do arquivo.
+   *
+   * Linha por linha, trocando só o que foi pedido: comentários, ordem e chaves
+   * que o painel não conhece ficam como estavam. Reescrever o arquivo a partir
+   * de um objeto perderia tudo isso — e `server.properties` costuma ter ajuste
+   * feito à mão que ninguém quer ver sumir.
+   *
+   * O valor vai **escapado em `\uXXXX`** quando sai do ASCII. O carregador de
+   * properties do Java lê o arquivo como ISO-8859-1, então um caractere UTF-8 cru
+   * (um `§` de cor, um acento no MOTD) chegaria à tela como dois caracteres
+   * errados. O escape funciona independente de encoding.
+   */
+  function escreverPropriedades(mudancas) {
+    const arquivo = path.join(DATA, "server.properties");
+    const original = fs.readFileSync(arquivo, "utf8");
+    const pendentes = new Map(Object.entries(mudancas));
+    const escapar = (v) => String(v).replace(/[^\x20-\x7E]/g,
+      (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+
+    const linhas = original.split("\n").map((linha) => {
+      if (!linha || linha.startsWith("#")) return linha;
+      const i = linha.indexOf("=");
+      if (i <= 0) return linha;
+      const chave = linha.slice(0, i).trim();
+      if (!pendentes.has(chave)) return linha;
+      const valor = escapar(pendentes.get(chave));
+      pendentes.delete(chave);
+      return `${chave}=${valor}`;
+    });
+
+    // chave que ainda não existia no arquivo entra no fim
+    for (const [chave, valor] of pendentes) linhas.push(`${chave}=${escapar(valor)}`);
+
+    const texto = linhas.join("\n");
+    const tmp = `${arquivo}.tmp`;
+    fs.writeFileSync(tmp, texto);
+    fs.renameSync(tmp, arquivo); // troca atômica: nunca deixa o arquivo pela metade
+    return properties();
+  }
+
+  return { bans, whitelist, properties, escreverPropriedades, startedAt, chatHistory, version, plataforma, tail };
 }

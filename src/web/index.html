@@ -522,6 +522,33 @@
   .ag-proximo{font-size:15px;font-weight:600;margin-bottom:16px;
     font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
   .ag-proximo.off{color:var(--faint);font-weight:400;font-family:"Inter",sans-serif}
+  /* distâncias: dois controles lado a lado, empilhando no celular */
+  .dist-grade{display:grid;gap:18px;margin-bottom:14px}
+  @media (min-width:640px){ .dist-grade{grid-template-columns:1fr 1fr;gap:22px} }
+  .dist-item{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .dist-topo{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .dist-rot{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .dist-val{font-size:19px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+  .dist-val.mudou{color:var(--amber)}
+  /* o range nativo é a peça que o navegador desenha por conta, igual ao select:
+     sem isto ele volta azul do sistema, fora da paleta da casa */
+  .dist-item input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:22px;
+    background:transparent;cursor:pointer;outline:none}
+  .dist-item input[type=range]::-webkit-slider-runnable-track{
+    height:5px;border-radius:100px;background:var(--inset);border:1px solid var(--line)}
+  .dist-item input[type=range]::-moz-range-track{
+    height:5px;border-radius:100px;background:var(--inset);border:1px solid var(--line)}
+  .dist-item input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:17px;height:17px;border-radius:50%;
+    background:var(--grass);border:2px solid var(--elev);margin-top:-7px;
+    box-shadow:0 0 0 1px var(--grass-lo);transition:transform .12s}
+  .dist-item input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:var(--grass);
+    border:2px solid var(--elev);box-shadow:0 0 0 1px var(--grass-lo)}
+  .dist-item input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+  .dist-item input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(140,219,98,.35)}
+
   .ag-linha{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
   .ag-campo{display:flex;flex-direction:column;gap:7px}
   .ag-campo>span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
@@ -1484,6 +1511,53 @@
           </div>
         </div>
 
+        <!-- As duas alavancas que mais mexem no TPS. Ficam aqui, e não na aba de
+             desempenho, porque mudá-las exige reinício — é ação de servidor. -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">
+            <div class="card-title">Distâncias</div>
+            <span class="hint" style="margin:0" id="dist-estado">–</span>
+          </div>
+          <div class="card-body">
+            <div class="dist-grade">
+              <div class="dist-item">
+                <div class="dist-topo">
+                  <span class="dist-rot">Visão</span>
+                  <span class="dist-val mono" id="dist-visao-val">–</span>
+                </div>
+                <input type="range" id="dist-visao" min="3" max="32" step="1" value="8" aria-label="Distância de visão">
+                <div class="hint" style="margin:0">Quantos chunks o jogador <b>enxerga</b>. Mexe na banda e no que o servidor precisa enviar.</div>
+              </div>
+              <div class="dist-item">
+                <div class="dist-topo">
+                  <span class="dist-rot">Simulação</span>
+                  <span class="dist-val mono" id="dist-sim-val">–</span>
+                </div>
+                <input type="range" id="dist-sim" min="3" max="32" step="1" value="8" aria-label="Distância de simulação">
+                <div class="hint" style="margin:0">Onde o mundo <b>roda</b>: mob anda, planta cresce, redstone pulsa. É a que custa CPU.</div>
+              </div>
+            </div>
+
+            <div class="banner off" id="dist-erro" style="display:none"></div>
+
+            <div class="banner mods-pend" id="dist-pendente" style="display:none">
+              <!-- span puro: `mud-nome` é a classe de nome de arquivo, com nowrap e
+                   reticências, e numa frase inteira ela corta o texto no meio -->
+              <span id="dist-pendente-txt"></span>
+              <button class="btn pri" id="dist-reiniciar">Reiniciar agora</button>
+            </div>
+
+            <div class="ag-rodape">
+              <div class="hint" style="margin:0">Não existe comando para trocar distância com o servidor de pé —
+                o valor vale no próximo boot. A simulação nunca passa da visão: seria gastar CPU animando chunk que ninguém recebe.</div>
+              <div class="ag-botoes">
+                <button class="btn sec" id="dist-desfazer" style="display:none">Desfazer</button>
+                <button class="btn pri" id="dist-salvar" disabled>Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card" style="margin-bottom:16px">
           <div class="card-head">
             <div class="card-title">Reinício automático</div>
@@ -2420,6 +2494,99 @@
       $("pw-hint").textContent = "Controle do contêiner desligado: falta DOCKER_API no compose do painel.";
     }
   }
+
+  /* ---------------- distâncias de visão e simulação ---------------- */
+
+  /**
+   * Não há como aplicar a quente: o valor vale no próximo boot. Por isso a tela
+   * mostra sempre duas coisas — o que **roda agora** e o que vai valer.
+   *
+   * `distSujo` segue o mesmo cuidado da agenda: enquanto alguém está arrastando,
+   * o polling de 2s não pode sobrescrever o que está na tela.
+   */
+  let distDados = null;
+  let distSujo = false;
+
+  const distVisao = () => Number($("dist-visao").value);
+  const distSim = () => Number($("dist-sim").value);
+
+  function renderDistancias() {
+    if (!distDados) return;
+    const { emUso, pendente } = distDados;
+    const v = distVisao(), s = distSim();
+
+    $("dist-visao-val").textContent = v;
+    $("dist-sim-val").textContent = s;
+    // âmbar quando o que está na tela difere do que o servidor está rodando
+    $("dist-visao-val").classList.toggle("mudou", v !== emUso["view-distance"]);
+    $("dist-sim-val").classList.toggle("mudou", s !== emUso["simulation-distance"]);
+
+    $("dist-estado").textContent =
+      `rodando com visão ${emUso["view-distance"]} e simulação ${emUso["simulation-distance"]}`;
+
+    const mudouNaTela = v !== distDados.arquivo["view-distance"] || s !== distDados.arquivo["simulation-distance"];
+    $("dist-salvar").disabled = !mudouNaTela;
+    $("dist-desfazer").style.display = mudouNaTela ? "" : "none";
+
+    const pend = $("dist-pendente");
+    if (pendente) {
+      $("dist-pendente-txt").textContent =
+        `Salvo: visão ${distDados.arquivo["view-distance"]} e simulação ${distDados.arquivo["simulation-distance"]}. `
+        + `O servidor segue com ${emUso["view-distance"]} e ${emUso["simulation-distance"]} até reiniciar.`;
+      pend.style.display = "";
+    } else {
+      pend.style.display = "none";
+    }
+
+    // a simulação não pode passar da visão; o próprio controle impede em vez de
+    // deixar o backend recusar depois de clicar em Salvar
+    $("dist-sim").max = String(v);
+    if (s > v) { $("dist-sim").value = String(v); $("dist-sim-val").textContent = v; }
+  }
+
+  function aplicarDistanciasNaTela(d) {
+    distDados = d;
+    if (distSujo) { renderDistancias(); return; }
+    $("dist-visao").value = String(d.arquivo["view-distance"]);
+    $("dist-sim").value = String(d.arquivo["simulation-distance"]);
+    renderDistancias();
+  }
+
+  async function loadDistancias() {
+    try { aplicarDistanciasNaTela(await api("/distancias")); }
+    catch (err) { $("dist-estado").textContent = err.message; }
+  }
+
+  for (const id of ["dist-visao", "dist-sim"]) {
+    $(id).addEventListener("input", () => { distSujo = true; renderDistancias(); });
+  }
+
+  $("dist-desfazer").onclick = () => {
+    distSujo = false;
+    aplicarDistanciasNaTela(distDados);
+  };
+
+  $("dist-salvar").onclick = async () => {
+    const btn = $("dist-salvar");
+    const erro = $("dist-erro");
+    btn.disabled = true; erro.style.display = "none";
+    try {
+      const d = await api("/distancias", {
+        method: "PUT",
+        body: JSON.stringify({ "view-distance": distVisao(), "simulation-distance": distSim() }),
+      });
+      distSujo = false;
+      aplicarDistanciasNaTela(d);
+      toast(d.pendente ? "salvo — vale no próximo reinício" : "salvo");
+    } catch (err) {
+      erro.textContent = err.message;
+      erro.style.display = "";
+      btn.disabled = false;
+    }
+  };
+
+  // reaproveita o mesmo caminho do botão de energia, com o mesmo aviso e confirmação
+  $("dist-reiniciar").onclick = () => $("pw-restart")?.click();
 
   /* ---------------- reinício agendado ---------------- */
 
@@ -4241,6 +4408,7 @@
     chatHist = []; chatVivo = []; chatBase = -1;
     ticks = 0;
     agSujo = false; // a agenda é de cada servidor: edição pela metade não atravessa a troca
+    distSujo = false; distDados = null; // idem para as distâncias
     bkaSujo = false; grafPontos = [];
     // a pasta de mods é de cada servidor: invalida pra não mostrar a lista do anterior
     modsCarregado = false; modsDados = null;
@@ -4449,7 +4617,7 @@
     // quem rola é o .content, não a janela — o scrollTo(0,0) de antes não fazia nada
     document.querySelector(".content").scrollTop = 0;
     if (autoscroll) TERMS.forEach((id) => { const e = $(id); if (e) e.scrollTop = e.scrollHeight; });
-    if (view === "servidor") { loadBackupInfo(); loadGuardados(); loadGrafico(); loadBackupAuto(); }
+    if (view === "servidor") { loadBackupInfo(); loadGuardados(); loadGrafico(); loadBackupAuto(); loadDistancias(); }
     if (view === "chat") loadChat();
     if (view === "mods") loadMods();
     if (view === "atividade") loadAtividade();

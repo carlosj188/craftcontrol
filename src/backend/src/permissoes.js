@@ -110,6 +110,17 @@ const REGRAS = [
   { m: "POST", re: `^${S}/backup/ticket$`, papel: "operador", acao: "backup.baixar",
     resumo: () => "baixou um backup do mundo" },
 
+  // ---- distâncias: mexem no desempenho de todo mundo, e exigem reinício ----
+  { m: "PUT", re: `^${S}/distancias$`, papel: "admin", acao: "distancias",
+    resumo: (r) => {
+      const b = r.body ?? {};
+      const p = [
+        b["view-distance"] !== undefined ? `visão ${Number(b["view-distance"])}` : null,
+        b["simulation-distance"] !== undefined ? `simulação ${Number(b["simulation-distance"])}` : null,
+      ].filter(Boolean).join(" e ");
+      return `mudou a distância de ${p} (vale no próximo reinício)`;
+    } },
+
   // ---- energia e agenda ----
   { m: "POST", re: `^${S}/power/([^/]+)$`, papel: "admin", acao: "power",
     resumo: (r, m) => `mandou ${decodeURIComponent(m[1])} no servidor` },

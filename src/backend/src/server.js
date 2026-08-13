@@ -479,6 +479,13 @@ async function rotasServidor(app) {
   });
 
   app.get("/agenda", async (req) => req.srv.agenda.status());
+  /**
+   * Distância de visão e de simulação. Só valem no próximo boot — não existe
+   * comando para trocar isso a quente no Minecraft baunilha.
+   */
+  app.get("/distancias", async (req) => req.srv.distancias.estado());
+  app.put("/distancias", async (req) => req.srv.distancias.definir(req.body ?? {}));
+
   app.put("/agenda", async (req) => req.srv.agenda.definir(req.body ?? {}));
   app.post("/agenda/pular", async (req) => req.srv.agenda.pularProxima());
 

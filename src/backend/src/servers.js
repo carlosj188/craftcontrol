@@ -7,6 +7,7 @@ import * as dockerMod from "./docker.js";
 import * as tpsMod from "./tps.js";
 import * as agendaMod from "./agenda.js";
 import * as modsMod from "./mods.js";
+import * as distanciasMod from "./distancias.js";
 import * as aplicarMod from "./aplicar.js";
 import * as backupAutoMod from "./backupauto.js";
 import * as tpsHistMod from "./tpshist.js";
@@ -231,6 +232,14 @@ function criarServidor(cfg) {
     ocupado: () => backup.isBusy() || restore.ocupado(),
   });
 
+  // as duas distâncias do server.properties, ajustáveis pelo painel. Fica com o
+  // `mc` porque é ele que sabe ler e escrever aquele arquivo.
+  const distancias = distanciasMod.criar({
+    dados: cfg.dados,
+    mc,
+    log: (lvl, msg) => push(lvl, msg, "panel"),
+  });
+
   // reinicia, vigia o boot e desfaz sozinho se o servidor não voltar
   const aplicarMods = aplicarMod.criar({
     mods, docker,
@@ -288,6 +297,7 @@ function criarServidor(cfg) {
     endereco: cfg.endereco,
     cfg,
     rcon, mc, history, backup, restore, docker, tps, tpsHist, agenda, mods, aplicarMods, backupAuto,
+    distancias,
     state,
     push,
     run,
