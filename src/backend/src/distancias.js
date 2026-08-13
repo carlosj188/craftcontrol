@@ -28,16 +28,39 @@ import path from "node:path";
  * chunk que ninguém recebe. Por isso a simulação é limitada pela visão aqui.
  */
 
-/** As únicas chaves que o painel mexe, com os limites que o servidor aceita. */
+/**
+ * As únicas chaves que o painel mexe, com os limites que o servidor aceita.
+ *
+ * `env` é a variável da imagem `itzg` que manda na mesma coisa. Ela existe aqui
+ * porque **a imagem reescreve o `server.properties` a cada boot** a partir do
+ * ambiente do compose: com `VIEW_DISTANCE` definido lá, o painel grava 12, o
+ * servidor reinicia e volta para o valor do compose — sem erro nenhum na tela.
+ * Detectar isso é o que transforma uma falha silenciosa em aviso.
+ */
 export const AJUSTAVEIS = {
-  "view-distance": { min: 3, max: 32, padrao: 10, rotulo: "visão" },
-  "simulation-distance": { min: 3, max: 32, padrao: 10, rotulo: "simulação" },
+  "view-distance": { min: 3, max: 32, padrao: 10, rotulo: "visão", env: "VIEW_DISTANCE" },
+  "simulation-distance": { min: 3, max: 32, padrao: 10, rotulo: "simulação", env: "SIMULATION_DISTANCE" },
 };
 
 const erro = (msg, statusCode = 400) => Object.assign(new Error(msg), { statusCode });
 
-export function criar({ dados, mc, log }) {
+export function criar({ dados, mc, docker, log }) {
   const ARQUIVO = path.join(dados, "mcpanel", "distancias-pendente.json");
+
+  /**
+   * Quais das nossas chaves o compose vai sobrescrever no próximo boot.
+   *
+   * Assíncrono porque vem do Docker; quem chama sem esperar recebe lista vazia e
+   * só perde o aviso. Nunca lança: sem acesso ao Docker o painel continua
+   * funcionando, apenas sem conseguir prevenir.
+   */
+  async function sobrescritasPeloCompose() {
+    const env = (await docker?.ambiente?.().catch(() => null)) || null;
+    if (!env) return [];
+    return Object.entries(AJUSTAVEIS)
+      .filter(([, lim]) => env[lim.env] !== undefined)
+      .map(([chave, lim]) => ({ chave, rotulo: lim.rotulo, variavel: lim.env, valor: env[lim.env] }));
+  }
 
   const carimboBoot = () => mc.startedAt() || null;
 
@@ -65,7 +88,7 @@ export function criar({ dados, mc, log }) {
    * `emUso` é o valor que o servidor carregou no boot — que só difere do arquivo
    * quando há mudança pendente. É ele que a interface mostra como "agora".
    */
-  function estado() {
+  async function estado() {
     const props = mc.properties();
     const numero = (chave) => {
       const n = Number(props[chave]);
@@ -86,6 +109,8 @@ export function criar({ dados, mc, log }) {
       // sem pendência, o que está no arquivo é o que está rodando
       emUso: pendente?.valores?.antes ?? arquivo,
       pendente: Boolean(pendente),
+      // não vazio = o compose vai desfazer isto no próximo boot
+      sobrescritas: await sobrescritasPeloCompose(),
       limites: AJUSTAVEIS,
     };
   }
@@ -97,8 +122,8 @@ export function criar({ dados, mc, log }) {
    * dizer "roda com 8, vai para 12 no próximo reinício" em vez de só avisar que
    * há algo pendente.
    */
-  function definir(pedido = {}) {
-    const atual = estado();
+  async function definir(pedido = {}) {
+    const atual = await estado();
     const novos = {};
 
     for (const [chave, lim] of Object.entries(AJUSTAVEIS)) {
@@ -123,12 +148,22 @@ export function criar({ dados, mc, log }) {
     const mudou = Object.entries(novos).some(([k, v]) => v !== atual.arquivo[k]);
     if (!mudou) return atual;
 
+    // Recusa antes de gravar quando o compose manda na mesma chave: gravar daria
+    // "salvo" na tela e o boot desfaria em silêncio, que é pior que um erro.
+    const conflito = atual.sobrescritas.filter((s) => novos[s.chave] !== undefined);
+    if (conflito.length) {
+      const quais = conflito.map((c) => `${c.variavel}=${c.valor}`).join(" e ");
+      throw erro(`o compose define ${quais}, e a imagem reescreve o server.properties a cada boot: `
+        + "a mudança seria desfeita no reinício. Tire essa variável do compose.yaml e recrie o "
+        + "contêiner do servidor — aí o painel passa a mandar nesse valor.", 409);
+    }
+
     mc.escreverPropriedades(novos);
     // o "antes" é o que continua rodando até o próximo boot
     anotar({ ...novos, antes: atual.emUso });
     log?.("warn", `distâncias gravadas (visão ${visao}, simulação ${simulacao}) — valem no próximo reinício`);
 
-    const depois = estado();
+    const depois = await estado();
     return { ...depois, pendente: true, emUso: atual.emUso };
   }
 

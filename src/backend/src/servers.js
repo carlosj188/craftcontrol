@@ -237,6 +237,8 @@ function criarServidor(cfg) {
   const distancias = distanciasMod.criar({
     dados: cfg.dados,
     mc,
+    // para detectar quando o compose define VIEW_DISTANCE e vai desfazer a mudança
+    docker,
     log: (lvl, msg) => push(lvl, msg, "panel"),
   });
 

@@ -1538,6 +1538,10 @@
               </div>
             </div>
 
+            <!-- a imagem itzg reescreve o server.properties a cada boot a partir do
+                 compose: com a variável lá, mudar aqui não sobrevive ao reinício -->
+            <div class="banner off" id="dist-compose" style="display:none"></div>
+
             <div class="banner off" id="dist-erro" style="display:none"></div>
 
             <div class="banner mods-pend" id="dist-pendente" style="display:none">
@@ -2524,8 +2528,24 @@
     $("dist-estado").textContent =
       `rodando com visão ${emUso["view-distance"]} e simulação ${emUso["simulation-distance"]}`;
 
+    // O compose manda mais alto que o arquivo: enquanto a variável existir lá, a
+    // imagem reescreve o server.properties a cada boot e a mudança some sem erro.
+    // Melhor travar o botão e explicar do que deixar salvar e desfazer sozinho.
+    const presas = distDados.sobrescritas || [];
+    const aviso = $("dist-compose");
+    if (presas.length) {
+      aviso.innerHTML = `<b>O compose manda nestes valores.</b> `
+        + `A imagem do servidor reescreve o <span class="mono">server.properties</span> a cada boot a partir de `
+        + presas.map((p) => `<span class="mono">${esc(p.variavel)}=${esc(p.valor)}</span>`).join(" e ")
+        + `, então mudar por aqui não sobreviveria ao reinício. Tire ${presas.length > 1 ? "essas variáveis" : "essa variável"} `
+        + `do <span class="mono">compose.yaml</span> e recrie o contêiner do servidor — aí o painel passa a mandar.`;
+      aviso.style.display = "";
+    } else {
+      aviso.style.display = "none";
+    }
+
     const mudouNaTela = v !== distDados.arquivo["view-distance"] || s !== distDados.arquivo["simulation-distance"];
-    $("dist-salvar").disabled = !mudouNaTela;
+    $("dist-salvar").disabled = !mudouNaTela || presas.length > 0;
     $("dist-desfazer").style.display = mudouNaTela ? "" : "none";
 
     const pend = $("dist-pendente");
@@ -4338,11 +4358,22 @@
 
   function apply(data) {
     const first = lastSeq === 0;
-    // o servidor subiu de novo: o que estava pendente virou realidade, e a lista de
-    // mods precisa ser relida pro aviso sumir sozinho em vez de esperar um clique
-    if (st && data.server.startedAt !== st.server.startedAt && modsDados?.pendente) {
+    /* O servidor subiu de novo: tudo que estava "esperando reinício" virou realidade.
+       Antes isto só agia com a aba de mods aberta e só se houvesse pendência
+       conhecida — então quem reiniciava por outro motivo (uma distância, o botão de
+       energia) continuava vendo na tela um aviso de "reinicie para aplicar" de algo
+       que já tinha sido aplicado. O estado no disco estava certo; a tela é que
+       ficava velha. Agora invalida sempre, e recarrega o que estiver à vista. */
+    if (st && data.server.startedAt !== st.server.startedAt) {
       modsCarregado = false;
       if ($("mods").classList.contains("active")) loadMods();
+      else if (modsDados?.pendente) {
+        // some com o número velho em vez de afirmar uma contagem que não vale mais
+        modsDados = null;
+        $("nav-mcount").textContent = "";
+      }
+      // as distâncias usam o mesmo carimbo de boot e sofriam do mesmo atraso
+      if ($("servidor").classList.contains("active")) loadDistancias();
     }
     st = data;
     // o desvio é medido a cada resposta: se o relógio da máquina estiver fora de

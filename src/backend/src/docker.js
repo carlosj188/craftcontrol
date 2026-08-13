@@ -62,9 +62,41 @@ export function criar({ container, espera = ESPERA_PADRAO }) {
     }
   }
 
+  /**
+   * As variáveis de ambiente do contêiner do servidor.
+   *
+   * Existe por um motivo específico: a imagem `itzg` **reescreve o
+   * `server.properties` a cada boot** a partir das variáveis do compose. Quem
+   * define `VIEW_DISTANCE` ali e depois muda a distância pelo painel vê a
+   * mudança sumir no reinício, sem erro nenhum na tela — o painel gravou certo e
+   * a imagem desfez.
+   *
+   * Ler o ambiente é o que permite avisar antes, em vez de deixar o usuário
+   * descobrir sozinho depois de reiniciar. Cache curto: isso não muda sem
+   * recriar o contêiner.
+   */
+  let envCache = { em: 0, valores: null };
+  async function ambiente() {
+    if (!habilitado()) return null;
+    if (envCache.valores && Date.now() - envCache.em < 60_000) return envCache.valores;
+    try {
+      const info = await (await chamar("GET", `/containers/${NOME}/json`, 8000)).json();
+      const valores = {};
+      for (const linha of info?.Config?.Env || []) {
+        const i = String(linha).indexOf("=");
+        if (i > 0) valores[linha.slice(0, i)] = linha.slice(i + 1);
+      }
+      envCache = { em: Date.now(), valores };
+      return valores;
+    } catch {
+      return null; // sem docker o painel só deixa de avisar; nada quebra
+    }
+  }
+
   return {
     habilitado,
     estado,
+    ambiente,
     reiniciar: () => chamar("POST", `/containers/${NOME}/restart?t=${espera}`),
     parar: () => chamar("POST", `/containers/${NOME}/stop?t=${espera}`),
     iniciar: () => chamar("POST", `/containers/${NOME}/start`),
