@@ -1678,10 +1678,13 @@
           <div class="card-body">
             <div class="bk">
               <div class="bk-info">
-                <div class="hint" style="margin:0">Envie um <span class="mono">.tar.gz</span> gerado aqui pelo painel.
+                <div class="hint" style="margin:0">Envie um <span class="mono">.zip</span> ou um
+                  <span class="mono">.tar.gz</span> — o do painel, ou um que você mesmo compactou depois de editar
+                  o mundo. A pasta pode ter qualquer nome, e o mundo pode estar na raiz do pacote: o que vale é
+                  onde está o <span class="mono">level.dat</span>.
                   O mundo de agora <b>não é apagado</b>: ele fica guardado ao lado, e dá pra voltar pra ele.</div>
               </div>
-              <input type="file" id="rs-file" accept=".gz,.tgz,application/gzip" style="display:none">
+              <input type="file" id="rs-file" accept=".zip,.gz,.tgz,application/zip,application/gzip" style="display:none">
               <button class="btn pri big" id="rs-pick">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21V9M7 13l5-5 5 5M4 4h16"/></svg>
                 Escolher arquivo
